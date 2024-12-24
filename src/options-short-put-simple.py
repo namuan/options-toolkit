@@ -55,81 +55,23 @@ def update_open_trades(
             existing_trade_id, leg_type=LegType.TRADE_OPEN
         )
 
-        trade_can_be_closed = False
+        updated_legs = update_legs_with_latest_data(db, existing_trade, quote_date)
 
-        if quote_date >= trade["ExpireDate"]:
-            trade_can_be_closed = True
-
-        updated_legs = []
-
-        for leg in existing_trade.legs:
-            od: OptionsData = db.get_current_options_data(
-                quote_date, leg.strike_price, leg.leg_expiry_date
-            )
-
-            if not od:
-                logging.warning(
-                    f"⚠️ Unable to find options data for {quote_date=}, {leg.strike_price=}, {leg.leg_expiry_date=}"
-                )
-                continue
-
-            if any(
-                price is None for price in (od.underlying_last, od.c_last, od.p_last)
-            ):
-                logging.warning(
-                    f"⚠️ Bad data found on {quote_date}. One of {od.underlying_last=}, {od.c_last=}, {od.p_last=} is missing"
-                )
-                continue
-
-            updated_leg = Leg(
-                leg_quote_date=quote_date,
-                leg_expiry_date=leg.leg_expiry_date,
-                contract_type=leg.contract_type,
-                position_type=leg.position_type,
-                strike_price=leg.strike_price,
-                underlying_price_open=leg.underlying_price_open,
-                premium_open=leg.premium_open,
-                underlying_price_current=od.underlying_last,
-                premium_current=od.p_last,
-                leg_type=LegType.TRADE_CLOSE
-                if trade_can_be_closed
-                else LegType.TRADE_AUDIT,
-                delta=od.p_delta,
-                gamma=od.p_gamma,
-                vega=od.p_vega,
-                theta=od.p_theta,
-                iv=od.p_iv,
-            )
-            updated_legs.append(updated_leg)
-            db.update_trade_leg(existing_trade_id, updated_leg)
-
-        total_premium_received = existing_trade.premium_captured
-        current_premium_value = round(sum(l.premium_current for l in updated_legs), 2)
-
-        premium_diff = total_premium_received - current_premium_value
-        logging.info(
-            f"Premium Diff: {total_premium_received=} + {current_premium_value=} = {premium_diff=}"
+        close_reason, trade_can_be_closed = check_profit_take_stop_loss_targets(
+            data_for_trade_management, existing_trade, trade, updated_legs
         )
 
-        # Calculate percentage gain/loss
-        premium_diff_pct = (premium_diff / total_premium_received) * 100
-        logging.info(
-            f"Trade {trade["TradeId"]}: Premium Diff: {premium_diff=}/{total_premium_received=} * 100 = {premium_diff_pct=}"
-        )
-
-        close_reason = "EXPIRED"
-
-        # Profit take: If we've captured the specified percentage of the premium received
-        if premium_diff_pct >= data_for_trade_management.profit_take:
-            trade_can_be_closed = True
-            close_reason = "PROFIT_TAKE"
-
-        # Stop loss: If we've lost the specified percentage of the premium received
-        if premium_diff_pct <= -data_for_trade_management.stop_loss:
-            trade_can_be_closed = True
-            close_reason = "STOP_LOSS"
+        for leg in updated_legs:
+            leg.leg_type = (
+                LegType.TRADE_CLOSE if trade_can_be_closed else LegType.TRADE_AUDIT
+            )
+            db.update_trade_leg(existing_trade_id, leg)
 
         # If trade has reached expiry date, close it
+        if not trade_can_be_closed and quote_date >= trade["ExpireDate"]:
+            trade_can_be_closed = True
+            close_reason = "EXPIRED"
+
         if trade_can_be_closed:
             logging.debug(
                 f"Trying to close trade {trade['TradeId']} at expiry {quote_date}"
@@ -148,6 +90,74 @@ def update_open_trades(
             logging.debug(
                 f"Trade {trade['TradeId']} still open as {quote_date} < {trade['ExpireDate']}"
             )
+
+
+def check_profit_take_stop_loss_targets(
+    data_for_trade_management, existing_trade, trade, updated_legs
+):
+    current_premium_value = round(sum(l.premium_current for l in updated_legs), 2)
+    total_premium_received = existing_trade.premium_captured
+    premium_diff = total_premium_received - current_premium_value
+    logging.info(
+        f"Premium Diff: {total_premium_received=} + {current_premium_value=} = {premium_diff=}"
+    )
+    # Calculate percentage gain/loss
+    premium_diff_pct = (premium_diff / total_premium_received) * 100
+    logging.info(
+        f"Trade {trade["TradeId"]}: Premium Diff: {premium_diff=}/{total_premium_received=} * 100 = {premium_diff_pct=}"
+    )
+    # Profit take: If we've captured the specified percentage of the premium received
+    if premium_diff_pct >= data_for_trade_management.profit_take:
+        return "PROFIT_TAKE", True
+    # Stop loss: If we've lost the specified percentage of the premium received
+    if premium_diff_pct <= -data_for_trade_management.stop_loss:
+        return "STOP_LOSS", True
+
+    return "UNKNOWN", False
+
+
+def bad_options_data(quote_date, od: OptionsData) -> bool:
+    if not od:
+        logging.warning(f"⚠️ Unable to find options data for {quote_date=}")
+        return True
+
+    if any(price is None for price in (od.underlying_last, od.c_last, od.p_last)):
+        logging.warning(
+            f"⚠️ Bad data found on {quote_date}. One of {od.underlying_last=}, {od.c_last=}, {od.p_last=} is missing"
+        )
+        return True
+    return False
+
+
+def update_legs_with_latest_data(db, existing_trade, quote_date):
+    updated_legs = []
+    for leg in existing_trade.legs:
+        od: OptionsData = db.get_current_options_data(
+            quote_date, leg.strike_price, leg.leg_expiry_date
+        )
+
+        if bad_options_data(quote_date, od):
+            continue
+
+        updated_leg = Leg(
+            leg_quote_date=quote_date,
+            leg_expiry_date=leg.leg_expiry_date,
+            contract_type=leg.contract_type,
+            position_type=leg.position_type,
+            strike_price=leg.strike_price,
+            underlying_price_open=leg.underlying_price_open,
+            premium_open=leg.premium_open,
+            underlying_price_current=od.underlying_last,
+            premium_current=od.p_last,
+            leg_type=LegType.TRADE_AUDIT,
+            delta=od.p_delta,
+            gamma=od.p_gamma,
+            vega=od.p_vega,
+            theta=od.p_theta,
+            iv=od.p_iv,
+        )
+        updated_legs.append(updated_leg)
+    return updated_legs
 
 
 def can_create_new_trade(db, quote_date, trade_delay_days):
