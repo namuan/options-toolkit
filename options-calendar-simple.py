@@ -97,12 +97,12 @@ def update_open_trades(db, quote_date):
 
         # If trade has reached expiry date, close it
         if trade_can_be_closed:
-            logging.info(
+            logging.debug(
                 f"Trying to close trade {trade['TradeId']} at expiry {quote_date}"
             )
             # Multiply by -1 because we reverse the positions (Buying back Short option and Selling Long option)
-            existing_trade.closing_premium = -1 * sum(
-                l.premium_current for l in updated_legs
+            existing_trade.closing_premium = round(
+                -1 * sum(l.premium_current for l in updated_legs), 2
             )
             existing_trade.closed_trade_at = quote_date
             existing_trade.close_reason = "EXPIRED"
@@ -111,7 +111,7 @@ def update_open_trades(db, quote_date):
                 f"Closed trade {trade['TradeId']} with {existing_trade.closing_premium} at expiry"
             )
         else:
-            logging.info(
+            logging.debug(
                 f"Trade {trade['TradeId']} still open as {quote_date} < {trade['ExpireDate']}"
             )
 
@@ -238,7 +238,7 @@ def main(args):
                 )
                 continue
 
-            logging.info(
+            logging.debug(
                 f"Quote date: {quote_date} -> {expiry_front_dte=} ({front_dte_found=:.1f}), "
                 f"{expiry_back_dte=} ({back_dte_found=:.1f})"
             )
@@ -297,10 +297,10 @@ def main(args):
                 )
                 continue
 
-            logging.info(
+            logging.debug(
                 f"Front Contract (Expiry {expiry_front_dte}): Underlying Price={front_underlying_price:.2f}, Strike Price={front_strike_price:.2f}, Call Price={front_call_price:.2f}, Put Price={front_put_price:.2f}"
             )
-            logging.info(
+            logging.debug(
                 f"Back Contract (Expiry {expiry_back_dte}): Underlying Price={back_underlying_price:.2f}, Strike Price={back_strike_price:.2f}, Call Price={back_call_price:.2f}, Put Price={back_put_price:.2f}"
             )
 
@@ -339,7 +339,9 @@ def main(args):
                     iv=back_put_iv,
                 ),
             ]
-            premium_captured_calculated = sum(leg.premium_open for leg in trade_legs)
+            premium_captured_calculated = round(
+                sum(leg.premium_open for leg in trade_legs), 2
+            )
             trade = Trade(
                 trade_date=quote_date,
                 expire_date=expiry_front_dte,
