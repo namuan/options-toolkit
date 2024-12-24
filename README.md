@@ -1,5 +1,7 @@
 # Options Analysis Toolkit
 
+![Intro](assets/trade-plotter.png)
+
 ## Reports
 
 * [short-put-1-max-close-expiry.html](docs/short-put/short-put-1-max-close-expiry.html)
