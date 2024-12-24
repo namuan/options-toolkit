@@ -3,600 +3,550 @@
 # dependencies = [
 #   "pandas",
 #   "plotly",
-#   "dash",
 # ]
 # ///
 """
-Trade Visualization Script
+This script calculates and visualizes the cumulative premium kept for trades from an SQLite database.
+Additionally, calculates and displays portfolio performance metrics for each DTE.
 
-Shows the underlying price movement and option prices for a specific trade,
-along with market context for the weeks before and after the trade.
-
-Usage:
-./options-straddle-simple-report.py -h  # Show help
-./options-straddle-simple-report.py -d path/to/database.db  # Show trades with default 2-week window
-./options-straddle-simple-report.py -d path/to/database.db -w 4  # Show trades with 4-week window
-./options-straddle-simple-report.py -d path/to/database.db -v  # To log INFO messages
-./options-straddle-simple-report.py -d path/to/database.db -vv  # To log DEBUG messages
-
-Arguments:
-    -d, --database : Path to SQLite database file
-    -w, --weeks    : Number of weeks to show before and after the trade (default: 2)
-    -v, --verbose  : Increase logging verbosity
+input:
+    - Path to SQLite database file
+    - Optional: Graph title
+output:
+    - Interactive equity graph showing the cumulative premium kept over time for different DTEs
+    - Portfolio performance metrics table in console and HTML
 """
 
-import logging
-import os
+import argparse
 import sqlite3
-import time
-import webbrowser
-from argparse import ArgumentParser, RawDescriptionHelpFormatter
-from datetime import timedelta
-from threading import Timer
 
-import dash
 import pandas as pd
 import plotly.graph_objects as go
-from dash import Dash, dcc, html
-from dash.dependencies import Input, Output, State
 from plotly.subplots import make_subplots
 
 
-def setup_logging(verbosity):
-    logging_level = logging.WARNING
-    if verbosity == 1:
-        logging_level = logging.INFO
-    elif verbosity >= 2:
-        logging_level = logging.DEBUG
+def calculate_portfolio_metrics(df):
+    metrics = {}
 
-    logging.basicConfig(
-        handlers=[
-            logging.StreamHandler(),
-        ],
-        format="%(asctime)s - %(filename)s:%(lineno)d - %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-        level=logging_level,
-    )
-    logging.captureWarnings(capture=True)
+    df["PremiumKept"] = pd.to_numeric(df["PremiumKept"], errors="coerce")
 
+    # Calculate win/loss metrics
+    winners = df[df["PremiumKept"] > 0]
+    losers = df[df["PremiumKept"] < 0]
+    total_trades = len(df)
 
-def parse_args():
-    parser = ArgumentParser(
-        description=__doc__, formatter_class=RawDescriptionHelpFormatter
-    )
-    parser.add_argument(
-        "-v",
-        "--verbose",
-        action="count",
-        default=0,
-        dest="verbose",
-        help="Increase verbosity of logging output",
-    )
-    parser.add_argument(
-        "-d",
-        "--database",
-        required=True,
-        help="Path to the SQLite database file",
-    )
-    parser.add_argument(
-        "-w",
-        "--weeks",
-        type=int,
-        default=2,
-        help="Number of weeks to show before and after the trade (default: 2)",
-    )
-    parser.add_argument(
-        "-t",
-        "--dte",
-        type=int,
-        required=True,
-        help="DTE data to analyse",
-    )
-    return parser.parse_args()
+    # Win/Loss statistics
+    num_winners = len(winners)
+    num_losers = len(losers)
+    win_rate = (num_winners / total_trades * 100) if total_trades > 0 else 0
+    loss_rate = (num_losers / total_trades * 100) if total_trades > 0 else 0
+
+    avg_winner = float(winners["PremiumKept"].mean()) if len(winners) > 0 else 0
+    avg_loser = abs(float(losers["PremiumKept"].mean())) if len(losers) > 0 else 0
+
+    # Maximum winner and loser
+    max_winner = float(winners["PremiumKept"].max()) if len(winners) > 0 else 0
+    max_loser = abs(float(losers["PremiumKept"].min())) if len(losers) > 0 else 0
+
+    # Calculate Expectancy Ratio
+    if avg_loser > 0:
+        expectancy_ratio = (
+            (win_rate / 100 * avg_winner) - (loss_rate / 100 * avg_loser)
+        ) / avg_loser
+    else:
+        expectancy_ratio = 0
+
+    # Calculate total cumulative premium
+    total_premium = float(df["PremiumKept"].sum())
+
+    # Store metrics with proper formatting
+    metrics["Total Trades"] = total_trades
+    metrics["Win Rate"] = f"{win_rate:.2f}%"
+    metrics["Avg Winner ($)"] = f"${avg_winner:.2f}"
+    metrics["Max Winner ($)"] = f"${max_winner:.2f}"
+    metrics["Loss Rate"] = f"{loss_rate:.2f}%"
+    metrics["Avg Loser ($)"] = f"${avg_loser:.2f}"
+    metrics["Max Loser ($)"] = f"${max_loser:.2f}"
+    metrics["Expectancy Ratio"] = f"{expectancy_ratio:.2f}"
+    metrics["Total Cumulative ($)"] = f"${total_premium:.2f}"
+
+    return metrics
 
 
-def get_all_trades(conn, dte):
-    """Fetch all trades from the database."""
-    trades_table = f"trades_dte_{int(dte)}"
+def create_metrics_table(metrics_dict):
+    # Convert metrics dictionary to DataFrame with metrics as columns
+    metrics_df = pd.DataFrame.from_dict(metrics_dict, orient="index")
+
+    # Rename the index to show "DTE" prefix
+    metrics_df.index = [dte for dte in metrics_df.index]
+
+    # Create table figure
+    table = go.Figure(
+        data=[
+            go.Table(
+                header=dict(
+                    values=["DTE"] + list(metrics_df.columns),
+                    fill_color="paleturquoise",
+                    align="left",
+                    font=dict(size=12),
+                ),
+                cells=dict(
+                    values=[metrics_df.index]
+                    + [metrics_df[col] for col in metrics_df.columns],
+                    fill_color="lavender",
+                    align="left",
+                    font=dict(size=11),
+                ),
+            )
+        ]
+    )
+
+    table.update_layout(
+        title="Trading Performance Metrics by DTE",
+        height=len(metrics_df) * 30 + 100,  # Adjust height based on number of rows
+        margin=dict(l=0, r=0, t=30, b=0),
+    )
+
+    return table
+
+
+def display_metrics_table(metrics_dict):
+    metrics_df = pd.DataFrame.from_dict(metrics_dict, orient="index")
+    metrics_df.index.name = "Metric"
+
+    print("\nTrading Performance Metrics:")
+    print("=" * 100)
+    print(metrics_df.to_string())
+    print("=" * 100)
+
+
+def get_dte_tables(db_path):
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+
+    cursor.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'trades_dte_%';"
+    )
+    tables = cursor.fetchall()
+
+    conn.close()
+
+    dte_tables = [table[0] for table in tables]
+    dte_tables.sort(key=lambda x: int(x.split("_")[-1]))
+
+    return dte_tables
+
+
+def fetch_data(db_path, table_name):
+    conn = sqlite3.connect(db_path)
+
     query = f"""
-    SELECT TradeId, Date, Status, StrikePrice, UnderlyingPriceOpen
-    FROM {trades_table}
-    ORDER BY Date ASC
+    SELECT
+        TradeId,
+        Date,
+        PremiumCaptured,
+        ClosingPremium,
+        (PremiumCaptured - ClosingPremium) AS PremiumKept
+    FROM {table_name};
     """
-    trades_df = pd.read_sql_query(query, conn)
-    trades_df["Date"] = pd.to_datetime(trades_df["Date"]).dt.strftime("%Y-%m-%d")
-    return trades_df
+
+    df = pd.read_sql(query, conn)
+
+    conn.close()
+
+    return df
 
 
-def get_trade_data(trade_id, conn, dte):
-    """Fetch trade details from the database."""
-    trades_table = f"trades_dte_{int(dte)}"
-    trade_query = f"SELECT * FROM {trades_table} WHERE TradeId = ?"
-    trade_df = pd.read_sql_query(trade_query, conn, params=(trade_id,))
+def calculate_total_subplot_heights(dfs_dict):
+    num_dtes = len(dfs_dict)
 
-    if trade_df.empty:
-        logging.error(f"No trade found with ID: {trade_id}")
-        return None
+    # Heights for different components
+    equity_graph_height = 800
+    metrics_table_height = (num_dtes + 1) * 40  # +1 for header
 
-    return trade_df
+    # Calculate win rates table heights
+    win_rates_table_heights = []
+    for dte in dfs_dict.keys():
+        num_years = len(set(pd.to_datetime(dfs_dict[dte]["Date"]).dt.year))
+        table_height = (num_years + 1) * 70  # Increased from 50 to 70
+        win_rates_table_heights.append(table_height)
 
+    total_win_rates_height = sum(win_rates_table_heights)
 
-def get_market_context(conn, window_start, window_end, dte):
-    """Fetch market context data within the specified window."""
-    trade_history_table = f"trade_history_dte_{int(dte)}"
-    market_query = f"""
-    SELECT th.Date, th.UnderlyingPrice, th.TradeId
-    FROM {trade_history_table} th
-    WHERE th.Date BETWEEN ? AND ?
-    ORDER BY th.Date
-    """
-    market_df = pd.read_sql_query(
-        market_query,
-        conn,
-        params=(window_start.strftime("%Y-%m-%d"), window_end.strftime("%Y-%m-%d")),
+    # Total height including padding
+    total_height = (
+        equity_graph_height
+        + metrics_table_height
+        + total_win_rates_height
+        + 50 * (num_dtes + 2)  # Reduced padding from 100 to 50
     )
-    market_df["Date"] = pd.to_datetime(market_df["Date"])
-    return market_df
+
+    return {
+        "total": total_height,
+        "equity": equity_graph_height,
+        "metrics": metrics_table_height,
+        "win_rates": win_rates_table_heights,
+    }
 
 
-def get_trade_history(trade_id, conn, dte):
-    """Fetch detailed trade history."""
-    trade_history_table = f"trade_history_dte_{int(dte)}"
-    history_query = (
-        f"SELECT * FROM {trade_history_table} WHERE TradeId = ? ORDER BY Date"
+def plot_equity_graph(dfs_dict, title):
+    # Calculate required heights
+    heights = calculate_total_subplot_heights(dfs_dict)
+    num_win_rate_tables = len(dfs_dict)
+
+    # Create subplot specs
+    specs = [
+        [{"type": "xy"}],  # Equity graph
+        [{"type": "table"}],  # Metrics table
+    ]
+
+    # Add specs for each DTE's win rate table
+    for _ in range(num_win_rate_tables):
+        specs.append([{"type": "table"}])
+
+    # Calculate row heights as proportions
+    total_height = heights["total"]
+    row_heights = [heights["equity"] / total_height, heights["metrics"] / total_height]
+    row_heights.extend([h / total_height for h in heights["win_rates"]])
+
+    vertical_spacing = 0.01  # Fixed vertical spacing instead of dynamic calculation
+
+    # Create subplot titles
+    subplot_titles = [title, "Performance Metrics by DTE"]
+    subplot_titles.extend(
+        [f"Monthly Win Rates - DTE {dte}" for dte in sorted(dfs_dict.keys())]
     )
-    history_df = pd.read_sql_query(history_query, conn, params=(trade_id,))
 
-    if history_df.empty:
-        logging.error(f"No trade history found for Trade ID: {trade_id}")
-        return None
-
-    history_df["Date"] = pd.to_datetime(history_df["Date"])
-    history_df["TotalOptionValue"] = history_df["CallPrice"] + history_df["PutPrice"]
-    return history_df
-
-
-def create_base_figure():
-    """Create the basic figure with three subplots."""
-    return make_subplots(
-        rows=3,
+    # Create subplots
+    fig = make_subplots(
+        rows=len(specs),
         cols=1,
-        vertical_spacing=0.1,
-        row_heights=[0.4, 0.3, 0.3],  # Adjusted row heights
+        row_heights=row_heights,
+        vertical_spacing=vertical_spacing,
+        specs=specs,
+        subplot_titles=subplot_titles,
     )
 
+    # Plot equity lines
+    dte_groups = {
+        (0, 10): "#FF4D4D",
+        (11, 20): "#4D94FF",
+        (21, 30): "#47B39C",
+        (31, 40): "#9747B3",
+        (41, 50): "#FF8C1A",
+        (51, 60): "#7E57C2",
+    }
 
-def add_price_traces(fig, market_df, history_df, trade_df, window_start, window_end):
-    """Add price movement related traces to the first subplot."""
-    # Market context
-    fig.add_trace(
-        go.Scatter(
-            x=market_df["Date"],
-            y=market_df["UnderlyingPrice"],
-            name="Market",
-            line=dict(color="#2E4053", width=1.5),
-            opacity=0.7,
-        ),
-        row=1,
-        col=1,
-    )
+    sorted_dtes = sorted(dfs_dict.keys())
+    dte_colors = {}
 
-    # Trade specific price
-    fig.add_trace(
-        go.Scatter(
-            x=history_df["Date"],
-            y=history_df["UnderlyingPrice"],
-            name="Underlying",
-            line=dict(color="blue", width=2),
-        ),
-        row=1,
-        col=1,
-    )
+    for dte in sorted_dtes:
+        for (lower, upper), base_color in dte_groups.items():
+            if lower <= dte <= upper:
+                dtes_in_group = sum(1 for d in dte_colors if lower <= d <= upper)
+                opacity = 0.4 + (0.6 * (dtes_in_group / 10))
+                r = int(base_color[1:3], 16)
+                g = int(base_color[3:5], 16)
+                b = int(base_color[5:7], 16)
+                dte_colors[dte] = f"rgba({r},{g},{b},{opacity})"
+                break
 
-    # Strike price
-    fig.add_trace(
-        go.Scatter(
-            x=[window_start, window_end],
-            y=[trade_df.StrikePrice.iloc[0], trade_df.StrikePrice.iloc[0]],
-            name="Strike Price",
-            line=dict(color="red", dash="dash"),
-        ),
-        row=1,
-        col=1,
-    )
+    for dte, df in dfs_dict.items():
+        df["Date"] = pd.to_datetime(df["Date"])
+        df["CumulativePremiumKept"] = df["PremiumKept"].cumsum()
 
-
-def add_entry_exit_lines(fig, trade_start_date, trade_end_date, y_range):
-    """Add entry and exit vertical lines."""
-    for date, color, name in [
-        (trade_start_date, "green", "Entry"),
-        (trade_end_date, "red", "Exit"),
-    ]:
         fig.add_trace(
             go.Scatter(
-                x=[date, date],
-                y=y_range,
-                mode="lines",
-                name=name,
-                line=dict(color=color, width=2, dash="dash"),
-                showlegend=False,
+                x=df["Date"],
+                y=df["CumulativePremiumKept"],
+                mode="lines+markers",
+                name=f"DTE {dte}",
+                line=dict(color=dte_colors[dte]),
+                marker=dict(size=1),
+                hovertemplate="<b>Date:</b> %{x}<br>"
+                + "<b>Cumulative Premium:</b> $%{y:.2f}<br>"
+                + f"<b>DTE:</b> {dte}<br>"
+                + "<extra></extra>",
             ),
             row=1,
             col=1,
         )
-        fig.add_annotation(
-            x=date, y=y_range[1], text=name, showarrow=False, yshift=10, row=1, col=1
-        )
-
-
-def add_option_price_traces(fig, history_df):
-    """Add option price traces to the second subplot."""
-    fig.add_trace(
-        go.Scatter(
-            x=history_df["Date"],
-            y=history_df["CallPrice"],
-            name="Call Price",
-            line=dict(color="green"),
-        ),
-        row=2,
-        col=1,
-    )
-    fig.add_trace(
-        go.Scatter(
-            x=history_df["Date"],
-            y=history_df["PutPrice"],
-            name="Put Price",
-            line=dict(color="red"),
-        ),
-        row=2,
-        col=1,
-    )
-
-
-def add_premium_traces(fig, history_df, initial_premium, window_start, window_end):
-    """Add premium analysis traces to the third subplot."""
-    fig.add_trace(
-        go.Scatter(
-            x=history_df["Date"],
-            y=history_df["TotalOptionValue"],
-            name="Current Premium",
-            line=dict(color="purple", width=2),
-        ),
-        row=3,
-        col=1,
-    )
-    fig.add_trace(
-        go.Scatter(
-            x=[window_start, window_end],
-            y=[initial_premium, initial_premium],
-            name="Initial Premium",
-            line=dict(color="purple", dash="dash"),
-        ),
-        row=3,
-        col=1,
-    )
-
-
-def update_figure_layout(fig, trade_id, trade_df, initial_premium, final_premium):
-    """Update the figure layout with trade details."""
-    annotation_font_size = "12px"
-
-    entry_price = trade_df.UnderlyingPriceOpen.iloc[0]
-    exit_price = trade_df.UnderlyingPriceClose.iloc[0]
-    strike_price = trade_df.StrikePrice.iloc[0]
-    close_reason = trade_df.CloseReason.iloc[0]
-
-    # Create annotations list with HTML formatting
-    annotations = [
-        f'<span style="font-size: {annotation_font_size};"><b>Entry:</b> ${entry_price:.2f}</span>',
-    ]
-
-    # Add exit price only if trade is closed
-    if pd.notna(exit_price):
-        annotations.append(
-            f'<span style="font-size: {annotation_font_size};"><b>Exit:</b> ${exit_price:.2f}</span>'
-        )
-    else:
-        annotations.append(
-            f'<span style="font-size: {annotation_font_size};"><b>Trade Status:</b> Open</span>'
-        )
-
-    annotations.append(
-        f'<span style="font-size: {annotation_font_size};"><b>Strike:</b> ${strike_price:.2f}</span>'
-    )
-
-    premium_gain_loss = initial_premium - final_premium
-    annotations.append(
-        f'<span style="font-size: {annotation_font_size};"><b>Entry Premium:</b> ${initial_premium:.2f}</span>'
-    )
-    annotations.append(
-        f'<span style="font-size: {annotation_font_size};"><b>Exit Premium:</b> ${final_premium:.2f}</span>'
-    )
-    if premium_gain_loss >= 0:
-        gain_loss_color = "green"
-    else:
-        gain_loss_color = "red"
-    annotations.append(
-        f'<span style="font-size: {annotation_font_size};"><b>Gain/Loss:</b> <span style="color:{gain_loss_color};">${premium_gain_loss:.2f}</span> ({close_reason})</span>'
-    )
-
-    # Join all annotations with <br> tags for newlines
-    title_text = " | ".join(annotations)
 
     fig.update_layout(
-        title={
-            "text": title_text,
-            "y": 0.98,
-            "x": 0.5,
-            "xanchor": "center",
-            "yanchor": "top",
-        },
-        showlegend=False,
-        legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01),
-        hovermode="x unified",
-        height=700,  # Reduced overall height
-        margin=dict(t=50),  # Reduced top margin for title
+        showlegend=True,
+        template="plotly_white",
+        height=total_height,
+        width=1200,
+        legend=dict(
+            orientation="h",  # Horizontal orientation
+            yanchor="bottom",
+            y=1.002,  # Minimal space above the plot
+            xanchor="center",
+            x=0.5,  # Center horizontally
+            bgcolor="rgba(255, 255, 255, 0.8)",
+        ),
+        margin=dict(r=50, t=120, b=20),  # Reduced top margin further
+        title=dict(
+            y=0.98,  # Adjusted title position
+            x=0.5,
+            xanchor="center",
+            yanchor="top",
+        ),
     )
 
-    # Update y-axis domains for better spacing
-    fig.update_yaxes(domain=[0.65, 1.0], row=1, col=1)  # Price Movement
-    fig.update_yaxes(domain=[0.35, 0.6], row=2, col=1)  # Option Values
-    fig.update_yaxes(domain=[0.0, 0.3], row=3, col=1)  # Total Premium
-
-
-def update_axes(fig):
-    """Update all axes properties."""
-    for row in [1, 2, 3]:
-        fig.update_xaxes(
-            showgrid=False,
-            zeroline=False,
-            row=row,
-            col=1,
-        )
-
-    fig.update_yaxes(
-        title_text="Price ($)",
-        showgrid=False,
-        zeroline=False,
-        row=1,
-        col=1,
-    )
-    fig.update_yaxes(
-        title_text="Option Price ($)",
-        showgrid=False,
-        zeroline=False,
-        row=2,
-        col=1,
-    )
-    fig.update_yaxes(
-        title_text="Premium Value ($)",
-        showgrid=False,
-        zeroline=False,
-        row=3,
-        col=1,
-    )
-
-
-def plot_trade_history(trade_id, conn, dte, weeks_window):
-    """Main function to create the trade history visualization."""
-    logging.info(f"Plotting trade history for Trade ID: {trade_id}")
-
-    # Get trade data
-    trade_df = get_trade_data(trade_id, conn, dte)
-    if trade_df is None:
-        return {}  # Return empty figure if no data
-
-    # Calculate dates and windows
-    trade_start_date = pd.to_datetime(trade_df.Date.iloc[0])
-
-    # Handle both open and closed trades
-    trade_end_date = (
-        pd.to_datetime(trade_df.ClosedTradeAt.iloc[0])
-        if pd.notna(trade_df.ClosedTradeAt.iloc[0])
-        else pd.Timestamp.now()
-    )
-
-    window_start = trade_start_date - timedelta(days=weeks_window * 7)
-    window_end = trade_end_date + timedelta(days=weeks_window * 7)
-
-    # Get market and trade history data
-    market_df = get_market_context(conn, window_start, window_end, dte)
-    history_df = get_trade_history(trade_id, conn, dte)
-    if history_df is None:
-        return {}
-
-    # Calculate initial premium
-    initial_premium = history_df["TotalOptionValue"].iloc[0]
-    final_premium = history_df["TotalOptionValue"].iloc[-1]
-
-    # Create figure and add traces
-    fig = create_base_figure()
-
-    # Calculate y_range for vertical lines
-    y_range = [
-        min(market_df["UnderlyingPrice"].min(), trade_df.StrikePrice.iloc[0]),
-        max(market_df["UnderlyingPrice"].max(), trade_df.StrikePrice.iloc[0]),
-    ]
-
-    # Add all traces
-    add_price_traces(fig, market_df, history_df, trade_df, window_start, window_end)
-    add_entry_exit_lines(fig, trade_start_date, trade_end_date, y_range)
-    add_option_price_traces(fig, history_df)
-    add_premium_traces(fig, history_df, initial_premium, window_start, window_end)
-
-    # Update layout and axes
-    update_figure_layout(fig, trade_id, trade_df, initial_premium, final_premium)
-    update_axes(fig)
+    fig.update_xaxes(title_text="Date", row=1, col=1)
+    fig.update_yaxes(title_text="Cumulative Premium Kept ($)", row=1, col=1)
 
     return fig
 
 
-def create_app(database_path, dte, weeks_window=2):
-    app = Dash(__name__)
+def add_metrics_to_figure(fig, metrics_dict):
+    # Convert metrics dictionary to DataFrame with metrics as columns
+    metrics_df = pd.DataFrame.from_dict(metrics_dict, orient="index")
 
-    # Get all trades for the dropdown
-    with sqlite3.connect(database_path) as conn:
-        trades_df = get_all_trades(conn, dte)
+    # Rename the index to show "DTE" prefix
+    metrics_df.index = [f"DTE {dte}" for dte in metrics_df.index]
 
-    app.layout = html.Div(
-        [
-            html.H1(
-                f"{dte} DTE Short Straddle Trades",
-                style={"textAlign": "center", "marginBottom": 30},
+    # Add table trace
+    fig.add_trace(
+        go.Table(
+            header=dict(
+                values=["DTE"] + list(metrics_df.columns),
+                fill_color="paleturquoise",
+                align="left",
+                font=dict(size=12),
             ),
-            html.Div(
-                [
-                    dcc.Dropdown(
-                        id="trade-selector",
-                        options=[
-                            {
-                                "label": f"Trade {row['TradeId']} - {row['Date']} "
-                                f"(Strike: ${row['StrikePrice']:.2f}, "
-                                f"Status: {row['Status']})",
-                                "value": row["TradeId"],
-                            }
-                            for _, row in trades_df.iterrows()
-                        ],
-                        value=trades_df["TradeId"].iloc[0],
-                        style={"width": "100%", "marginBottom": 20},
-                    ),
-                    html.Div(
-                        [
-                            html.Button(
-                                "Start Auto-Cycle",
-                                id="auto-cycle-button",
-                                style={"marginRight": "10px"},
-                            ),
-                            html.Button(
-                                "Pause",
-                                id="pause-button",
-                                style={"marginRight": "10px"},
-                            ),
-                        ],
-                        style={"marginTop": "10px", "marginBottom": "20px"},
-                    ),
-                ],
-                style={"width": "80%", "margin": "auto"},
+            cells=dict(
+                values=[metrics_df.index]
+                + [metrics_df[col] for col in metrics_df.columns],
+                fill_color="lavender",
+                align="left",
+                font=dict(size=11),
             ),
-            dcc.Graph(id="trade-graph", config={"displayModeBar": False}),
-            dcc.Store(id="database-path", data=database_path),
-            dcc.Store(id="weeks-window", data=weeks_window),
-            dcc.Store(
-                id="auto-cycle-state",
-                data={"running": False, "last_update": None, "paused": False},
-            ),
-            dcc.Interval(
-                id="auto-cycle-interval",
-                interval=2000,
-                n_intervals=0,
-            ),
-        ]
+        ),
+        row=2,
+        col=1,
     )
 
-    @app.callback(
-        Output("auto-cycle-state", "data"),
-        Output("auto-cycle-button", "children"),
-        Output("pause-button", "children"),
-        Input("auto-cycle-button", "n_clicks"),
-        Input("pause-button", "n_clicks"),
-        State("auto-cycle-state", "data"),
-        prevent_initial_call=True,
+    return fig
+
+
+def add_win_rates_to_figure(fig, win_rates_df, row_number):
+    # Function to determine cell color based on premium value
+    def get_cell_color(value):
+        if value == "-":
+            return "lavender"
+        # Remove "$" and convert to float
+        try:
+            amount = float(value.replace("$", ""))
+            if amount > 0:
+                # Green scale for positive values
+                intensity = min(
+                    abs(amount) / 1000, 1
+                )  # Adjust 1000 to change color intensity scaling
+                return f"rgba(0, 255, 0, {0.1 + intensity * 0.3})"
+            else:
+                # Red scale for negative values
+                intensity = min(
+                    abs(amount) / 1000, 1
+                )  # Adjust 1000 to change color intensity scaling
+                return f"rgba(255, 0, 0, {0.1 + intensity * 0.3})"
+        except:
+            return "lavender"
+
+    # Create cell colors for each column
+    cell_colors = []
+    for col in win_rates_df.columns:
+        col_colors = [get_cell_color(val) for val in win_rates_df[col]]
+        cell_colors.append(col_colors)
+
+    fig.add_trace(
+        go.Table(
+            header=dict(
+                values=["Year"] + list(win_rates_df.columns),
+                fill_color="paleturquoise",
+                align="center",
+                font=dict(size=12),
+                height=60,  # Increased from 40 to 60
+            ),
+            cells=dict(
+                values=[win_rates_df.index]
+                + [win_rates_df[col] for col in win_rates_df.columns],
+                fill_color=["lavender"] + cell_colors,
+                align="center",
+                font=dict(size=11),
+                height=30,  # Increased from 40 to 60
+            ),
+        ),
+        row=row_number,
+        col=1,
     )
-    def toggle_auto_cycle(start_clicks, pause_clicks, current_state):
-        ctx = dash.callback_context
-        if not ctx.triggered:
-            return current_state, "Start Auto-Cycle", "Pause"
+    return fig
 
-        trigger_id = ctx.triggered[0]["prop_id"].split(".")[0]
 
-        if trigger_id == "auto-cycle-button":
-            if current_state["running"]:
-                return (
-                    {
-                        "running": False,
-                        "last_update": None,
-                        "paused": False,
-                    },
-                    "Start Auto-Cycle",
-                    "Pause",
+def create_html_output(fig):
+    html_content = f"""
+    <html>
+    <head>
+        <title>Trading Analysis</title>
+        <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+        <style>
+            body {{
+                font-family: Arial, sans-serif;
+                margin: 20px;
+                background-color: #f5f5f5;
+            }}
+            .container {{
+                max-width: 1200px;
+                margin: 0 auto;
+                background-color: white;
+                padding: 20px;
+                box-shadow: 0 0 10px rgba(0,0,0,0.1);
+                border-radius: 5px;
+            }}
+            .graph-container {{
+                margin-bottom: 30px;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="graph-container">
+                {fig.to_html(full_html=False, include_plotlyjs=False)}
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+    return html_content
+
+
+def calculate_monthly_win_rates_per_dte(dfs_dict):
+    monthly_win_rates_dict = {}
+
+    for dte, df in dfs_dict.items():
+        df = df.copy()
+        # Convert Date to datetime if it's not already
+        df["Date"] = pd.to_datetime(df["Date"])
+
+        # Add year and month columns
+        df["Year"] = df["Date"].dt.year
+        df["Month"] = df["Date"].dt.month
+
+        # Calculate premium difference
+        df["PremiumDiff"] = df["PremiumCaptured"] - df["ClosingPremium"]
+
+        # Group by year and month and calculate total premium difference
+        monthly_stats = (
+            df.groupby(["Year", "Month"])
+            .agg(premium_diff=("PremiumDiff", lambda x: f"${x.sum():.2f}"))
+            .reset_index()
+        )
+
+        # Calculate yearly totals
+        yearly_totals = (
+            df.groupby("Year")
+            .agg(yearly_total=("PremiumDiff", lambda x: f"${x.sum():.2f}"))
+            .reset_index()
+        )
+
+        # Pivot the data to create the desired table format
+        stats_table = monthly_stats.pivot(
+            index="Year", columns="Month", values="premium_diff"
+        )
+
+        # Create a formatted table with premium differences
+        formatted_table = pd.DataFrame(index=stats_table.index)
+        for month in range(1, 13):
+            if month in stats_table.columns:
+                formatted_table[f"{pd.Timestamp(2024, month, 1).strftime('%b')}"] = (
+                    stats_table[month]
                 )
             else:
-                return (
-                    {
-                        "running": True,
-                        "last_update": time.time(),
-                        "paused": False,
-                    },
-                    "Stop Auto-Cycle",
-                    "Pause",
-                )
+                formatted_table[f"{pd.Timestamp(2024, month, 1).strftime('%b')}"] = "-"
 
-        elif trigger_id == "pause-button":
-            if current_state["running"]:
-                new_paused_state = not current_state["paused"]
-                return (
-                    {
-                        "running": True,
-                        "last_update": current_state["last_update"],
-                        "paused": new_paused_state,
-                    },
-                    "Stop Auto-Cycle",
-                    "Resume" if new_paused_state else "Pause",
-                )
-            else:
-                return current_state, "Start Auto-Cycle", "Pause"
+        # Add yearly total column
+        formatted_table["Total"] = yearly_totals.set_index("Year")["yearly_total"]
 
-    @app.callback(
-        Output("trade-selector", "value"),
-        Input("auto-cycle-interval", "n_intervals"),
-        State("auto-cycle-state", "data"),
-        State("trade-selector", "value"),
-        State("trade-selector", "options"),
-    )
-    def update_selected_trade(n_intervals, auto_cycle_state, current_trade, options):
-        if not auto_cycle_state["running"] or auto_cycle_state["paused"]:
-            return current_trade
+        monthly_win_rates_dict[dte] = formatted_table
 
-        current_time = time.time()
-        last_update = auto_cycle_state["last_update"]
-
-        if last_update is None or (current_time - last_update) < 1:
-            return current_trade
-
-        # Find next trade in the sequence
-        trade_ids = [opt["value"] for opt in options]
-        current_index = trade_ids.index(current_trade)
-        next_index = (current_index + 1) % len(trade_ids)
-        return trade_ids[next_index]
-
-    @app.callback(
-        Output("trade-graph", "figure"),
-        Input("trade-selector", "value"),
-        Input("database-path", "data"),
-        Input("weeks-window", "data"),
-    )
-    def update_graph(selected_trade_id, database_path, weeks_window):
-        with sqlite3.connect(database_path) as conn:
-            return plot_trade_history(selected_trade_id, conn, dte, weeks_window)
-
-    return app
+    return monthly_win_rates_dict
 
 
-def main(args):
-    setup_logging(args.verbose)
-    logging.info(
-        f"Connecting to database: {args.database} and analysing data with {args.dte} dte"
+def parse_arguments():
+    parser = argparse.ArgumentParser(
+        description="Generate equity graphs and calculate portfolio metrics based on trades data from an SQLite database.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
 
-    def open_browser(port=8050):
-        if not os.environ.get("WERKZEUG_RUN_MAIN"):
-            webbrowser.open_new(f"http://localhost:{port}")
+    parser.add_argument(
+        "--db-path", type=str, required=True, help="Path to the SQLite database file"
+    )
 
-    app = create_app(args.database, args.dte, args.weeks)
-    Timer(1, open_browser).start()
-    app.run_server(debug=True)
+    parser.add_argument(
+        "--output", type=str, help="Optional: Path to save the equity graph HTML file"
+    )
+
+    parser.add_argument(
+        "--title",
+        type=str,
+        default="Short Straddles - Cumulative Premium Kept by DTE",
+        help="Optional: Title for the equity graph",
+    )
+
+    return parser.parse_args()
+
+
+def main():
+    args = parse_arguments()
+
+    print(f"\nFetching data from database: {args.db_path}")
+    dte_tables = get_dte_tables(args.db_path)
+
+    if not dte_tables:
+        print("No trades_dte tables found in the database.")
+        return
+
+    print(f"\nFound tables: {', '.join(dte_tables)}")
+
+    dfs_dict = {}
+    metrics_dict = {}
+
+    for table in dte_tables:
+        dte = int(table.split("_")[-1])
+        df = fetch_data(args.db_path, table)
+
+        if not df.empty:
+            dfs_dict[dte] = df
+            metrics_dict[dte] = calculate_portfolio_metrics(df)
+
+    if not dfs_dict:
+        print("No data found in any of the tables.")
+        return
+
+    # Calculate monthly win rates for each DTE
+    monthly_win_rates_dict = calculate_monthly_win_rates_per_dte(dfs_dict)
+
+    # Create main figure with equity graph
+    fig = plot_equity_graph(dfs_dict, args.title)
+
+    # Add metrics table
+    fig = add_metrics_to_figure(fig, metrics_dict)
+
+    # Add win rate tables for each DTE
+    current_row = 3  # Starting after equity graph and metrics table
+    for dte in sorted(dfs_dict.keys()):
+        fig = add_win_rates_to_figure(fig, monthly_win_rates_dict[dte], current_row)
+        current_row += 1
+
+    fig.show()
+
+    if args.output:
+        html_content = create_html_output(fig)
+        with open(args.output, "w", encoding="utf-8") as f:
+            f.write(html_content)
+        print(f"\nEquity graph and metrics saved to: {args.output}")
 
 
 if __name__ == "__main__":
-    args = parse_args()
-    main(args)
+    main()
