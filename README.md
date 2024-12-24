@@ -4,7 +4,7 @@
 
 ## Reports
 
-* [short-put-1-max-close-expiry.html](docs/short-put/short-put-1-max-close-expiry.html)
+* [short-put-1-max-close-expiry.html](https://namuan.github.io/options-toolkit/short-put/short-put-1-max-close-expiry.html)
 
 ## Import Data
 
