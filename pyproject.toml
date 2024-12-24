@@ -1,0 +1,7 @@
+[project]
+name = "options-toolkit"
+version = "0.1.0"
+description = "Helper scripts"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = []
