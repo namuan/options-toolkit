@@ -146,7 +146,7 @@ def fetch_data(db_path, table_name):
         Date,
         PremiumCaptured,
         ClosingPremium,
-        (PremiumCaptured - ClosingPremium) AS PremiumKept
+        (PremiumCaptured + ClosingPremium) AS PremiumKept
     FROM {table_name};
     """
 
@@ -434,7 +434,7 @@ def calculate_monthly_win_rates_per_dte(dfs_dict):
         df["Month"] = df["Date"].dt.month
 
         # Calculate premium difference
-        df["PremiumDiff"] = df["PremiumCaptured"] - df["ClosingPremium"]
+        df["PremiumDiff"] = df["PremiumCaptured"] + df["ClosingPremium"]
 
         # Group by year and month and calculate total premium difference
         monthly_stats = (

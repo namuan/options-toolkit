@@ -12,8 +12,4 @@ __pycache__/
 !docs
 !assets
 
-!logger.py
-!options-calendar-simple.py
-!options-trade-plotter.py
-!options_analysis.py
-!options-strategy-report.py
+!src/
