@@ -490,7 +490,7 @@ def parse_arguments():
     parser.add_argument(
         "--title",
         type=str,
-        default="Short Straddles - Cumulative Premium Kept by DTE",
+        default="<< Missing Report Title >> - Cumulative Premium Kept by DTE",
         help="Optional: Title for the equity graph",
     )
 
