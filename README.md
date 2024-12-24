@@ -32,6 +32,13 @@ Trade every day, Close at Expiry
 ./src/options-short-put-simple.py --db-path data/spx_eod.db --dte 30 --start-date 2020-01-01 --end-date 2023-12-30 --max-open-trades 1 -v
 ```
 
+Filter: Between dates, 30 DTE, PT 10%, SL 75%, Max 1 Trade.
+Trade every day
+
+```shell
+./src/options-short-put-simple.py --db-path data/spx_eod.db --dte 30 --start-date 2020-01-13 --end-date 2020-03-30 --max-open-trades 1 --profit-take 10 --stop-loss 75
+```
+
 Filter: 30 DTE
 Trade every day, Close at Expiry
 
@@ -49,10 +56,16 @@ for dte in {7..60}; do
 done
 ```
 
+
+```shell
+./src/options-short-put-trade-plotter.py --db-path data/spx_eod.db --table-tag 30
+```
+
+View Report
+
 ```shell
 ./src/options-strategy-report.py --db-path data/spx_eod.db
 ```
-
 
 ### Long Put Calendar
 

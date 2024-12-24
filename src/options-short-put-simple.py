@@ -18,6 +18,7 @@ Usage:
 
 import logging
 from argparse import ArgumentParser, RawDescriptionHelpFormatter
+from dataclasses import dataclass
 from datetime import datetime
 
 import pandas as pd
@@ -36,7 +37,15 @@ from options_analysis import (
 pd.set_option("display.float_format", lambda x: "%.4f" % x)
 
 
-def update_open_trades(db, quote_date):
+@dataclass
+class DataForTradeManagement:
+    profit_take: float
+    stop_loss: float
+
+
+def update_open_trades(
+    db, quote_date, data_for_trade_management: DataForTradeManagement
+):
     """Update all open trades with current prices"""
     open_trades = db.get_open_trades()
 
@@ -94,6 +103,32 @@ def update_open_trades(db, quote_date):
             updated_legs.append(updated_leg)
             db.update_trade_leg(existing_trade_id, updated_leg)
 
+        total_premium_received = existing_trade.premium_captured
+        current_premium_value = round(sum(l.premium_current for l in updated_legs), 2)
+
+        premium_diff = total_premium_received - current_premium_value
+        logging.info(
+            f"Premium Diff: {total_premium_received=} + {current_premium_value=} = {premium_diff=}"
+        )
+
+        # Calculate percentage gain/loss
+        premium_diff_pct = (premium_diff / total_premium_received) * 100
+        logging.info(
+            f"Trade {trade["TradeId"]}: Premium Diff: {premium_diff=}/{total_premium_received=} * 100 = {premium_diff_pct=}"
+        )
+
+        close_reason = "EXPIRED"
+
+        # Profit take: If we've captured the specified percentage of the premium received
+        if premium_diff_pct >= data_for_trade_management.profit_take:
+            trade_can_be_closed = True
+            close_reason = "PROFIT_TAKE"
+
+        # Stop loss: If we've lost the specified percentage of the premium received
+        if premium_diff_pct <= -data_for_trade_management.stop_loss:
+            trade_can_be_closed = True
+            close_reason = "STOP_LOSS"
+
         # If trade has reached expiry date, close it
         if trade_can_be_closed:
             logging.debug(
@@ -104,7 +139,7 @@ def update_open_trades(db, quote_date):
                 -1 * sum(l.premium_current for l in updated_legs), 2
             )
             existing_trade.closed_trade_at = quote_date
-            existing_trade.close_reason = "EXPIRED"
+            existing_trade.close_reason = close_reason
             db.close_trade(existing_trade_id, existing_trade)
             logging.info(
                 f"Closed trade {trade['TradeId']} with {existing_trade.closing_premium} at expiry"
@@ -192,6 +227,18 @@ def parse_args():
         type=str,
         help="End date for backtesting",
     )
+    parser.add_argument(
+        "--profit-take",
+        type=float,
+        default=30.0,
+        help="Close position when profit reaches this percentage of premium received",
+    )
+    parser.add_argument(
+        "--stop-loss",
+        type=float,
+        default=100.0,
+        help="Close position when loss reaches this percentage of premium received",
+    )
     return parser.parse_args()
 
 
@@ -206,8 +253,11 @@ def main(args):
 
         for quote_date in quote_dates:
             logging.info(f"Processing {quote_date}")
+            data_for_trade_management = DataForTradeManagement(
+                args.profit_take, args.stop_loss
+            )
 
-            update_open_trades(db, quote_date)
+            update_open_trades(db, quote_date, data_for_trade_management)
 
             # Check if maximum number of open trades has been reached
             open_trades = db.get_open_trades()
@@ -249,14 +299,14 @@ def main(args):
             put_theta = put_df["PUT_P_THETA"].iloc[0]
             put_iv = put_df["PUT_P_IV"].iloc[0]
 
-            if call_price is None or put_price is None:
+            if put_price in [None, 0]:
                 logging.warning(
-                    f"⚠️ Bad data found on {quote_date}. One of {call_price}, {put_price} is not valid."
+                    f"⚠️ Bad data found on {quote_date=}. One of {call_price=}, {put_price=} is not valid."
                 )
                 continue
 
             logging.debug(
-                f"Contract (Expiry {expiry_dte}): Underlying Price={underlying_price:.2f}, Strike Price={strike_price:.2f}, Call Price={call_price:.2f}, Put Price={put_price:.2f}"
+                f"Contract ({expiry_dte=}): {underlying_price=:.2f}, {strike_price=:.2f}, {call_price=:.2f}, {put_price=:.2f}"
             )
 
             # create a multi leg trade in database
