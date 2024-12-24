@@ -25,18 +25,18 @@ Check for any missing data
 
 ### Naked Short Put
 
-Filter: Between dates. 30 DTE
 Trade every day, Close at Expiry
+Filter: Between dates. 30 DTE
 
 ```shell
-./src/options-short-put-simple.py --db-path data/spx_eod.db --dte 30 --start-date 2020-01-01 --end-date 2023-12-30 --max-open-trades 1 -v
+./src/options-short-put-simple.py --db-path data/spx_eod.db --dte 30 --start-date 2020-01-01 --end-date 2020-03-30 --max-open-trades 1 --profit-take 10 --stop-loss 75 -v
 ```
 
-Filter: Between dates, 30 DTE, PT 10%, SL 75%, Max 1 Trade.
 Trade every day
+Filter: 30 DTE, PT 10%, SL 75%, Max 5 Trades.
 
 ```shell
-./src/options-short-put-simple.py --db-path data/spx_eod.db --dte 30 --start-date 2020-01-13 --end-date 2020-03-30 --max-open-trades 1 --profit-take 10 --stop-loss 75
+./src/options-short-put-simple.py --db-path data/spx_eod.db --dte 45 --max-open-trades 5 --profit-take 10 --stop-loss 75
 ```
 
 Filter: 30 DTE
@@ -52,7 +52,7 @@ Trade every day, Max 5 positions, Close at Expiry
 ```shell
 for dte in {7..60}; do
     echo "Running for DTE: $dte"
-    ./src/options-short-put-simple.py --db-path data/spx_eod.db --dte $dte --max-open-trades 1
+    ./src/options-short-put-simple.py --db-path data/spx_eod.db --dte $dte --max-open-trades 1 --profit-take 10 --stop-loss 75
 done
 ```
 
@@ -78,6 +78,30 @@ Trade every day, Close at Expiry
 
 ```shell
 ./src/options-calendar-trade-plotter.py --db-path data/spx_eod.db --front-dte 30 --back-dte 60
+```
+
+```shell
+./src/options-strategy-report.py --db-path data/spx_eod.db
+```
+
+### Short Straddle
+
+Filter: Between dates. 30 DTE
+Trade every day, Close at Expiry
+
+```shell
+./src/options-short-straddle-simple.py --db-path data/spx_eod.db --dte 45 --start-date 2023-01-01 --end-date 2023-12-30 --max-open-trades 5 -v
+```
+
+```shell
+for dte in {7..60}; do
+    echo "Running for DTE: $dte"
+    ./src/options-short-straddle-simple.py --db-path data/spx_eod.db --dte $dte --start-date 2022-01-01 --end-date 2023-12-30 --max-open-trades 5 -v
+done
+```
+
+```shell
+./src/options-trade-plotter.py --db-path data/spx_eod.db --table-tag 60
 ```
 
 ```shell
