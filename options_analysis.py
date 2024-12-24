@@ -178,7 +178,6 @@ class OptionsDatabase:
         self.cursor = None
         self.trades_table = f"trades_dte_{table_tag}"
         self.trade_legs_table = f"trade_legs_dte_{table_tag}"
-        self.trade_history_table = f"trade_history_dte_{table_tag}"
 
     def __enter__(self) -> "OptionsDatabase":
         """Context manager entry point - connects to database"""
@@ -195,11 +194,16 @@ class OptionsDatabase:
         self.conn = sqlite3.connect(self.db_path)
         self.cursor = self.conn.cursor()
 
+    def disconnect(self):
+        """Close database connection"""
+        if self.conn:
+            logging.info("Closing database connection")
+            self.conn.close()
+
     def setup_trades_table(self):
         """Drop and recreate trades and trade_history tables with DTE suffix"""
         # Drop existing tables (trade_history first due to foreign key constraint)
         drop_tables_sql = [
-            f"DROP TABLE IF EXISTS {self.trade_history_table}",
             f"DROP TABLE IF EXISTS {self.trade_legs_table}",
             f"DROP TABLE IF EXISTS {self.trades_table}",
         ]
@@ -252,21 +256,8 @@ class OptionsDatabase:
             FOREIGN KEY(TradeId) REFERENCES {self.trades_table}(TradeId)
         )
         """
-        # Create trade_history table to track daily prices
-        create_history_table_sql = f"""
-        CREATE TABLE IF NOT EXISTS {self.trade_history_table} (
-            HistoryId INTEGER PRIMARY KEY,
-            TradeId INTEGER,
-            Date DATE,
-            UnderlyingPrice REAL,
-            CallPrice REAL,
-            PutPrice REAL,
-            FOREIGN KEY(TradeId) REFERENCES {self.trades_table}(TradeId)
-        )
-        """
         self.cursor.execute(create_table_sql)
         self.cursor.execute(create_trade_legs_table_sql)
-        self.cursor.execute(create_history_table_sql)
         logging.info("Tables dropped and recreated successfully")
 
         # Add indexes for options_data table
@@ -525,64 +516,6 @@ class OptionsDatabase:
 
         return trades
 
-    def create_trade(
-        self,
-        date,
-        strike_price,
-        call_price,
-        put_price,
-        underlying_price,
-        expire_date,
-        dte,
-    ):
-        """Create a new short straddle trade"""
-        logging.info(
-            f"Creating trade for {date} with {strike_price=}, {call_price=}, {put_price=}, {underlying_price=}"
-        )
-        insert_sql = f"""
-        INSERT INTO {self.trades_table} (
-            Date, ExpireDate, DTE, StrikePrice, Status,
-            UnderlyingPriceOpen, CallPriceOpen, PutPriceOpen, PremiumCaptured
-        ) VALUES (?, ?, ?, ?, 'OPEN', ?, ?, ?, ?)
-        """
-        premium_captured = call_price + put_price
-        self.cursor.execute(
-            insert_sql,
-            (
-                date,
-                expire_date,
-                dte,
-                strike_price,
-                underlying_price,
-                call_price,
-                put_price,
-                premium_captured,
-            ),
-        )
-        trade_id = self.cursor.lastrowid
-
-        # Add first history record
-        self.add_trade_history(trade_id, date, underlying_price, call_price, put_price)
-
-        self.conn.commit()
-        logging.info(
-            f"Created new trade {trade_id} for date {date} at strike {strike_price}"
-        )
-        return trade_id
-
-    def add_trade_history(
-        self, trade_id, date, underlying_price, call_price, put_price
-    ):
-        """Add a history record for a trade"""
-        insert_sql = f"""
-        INSERT INTO {self.trade_history_table} (TradeId, Date, UnderlyingPrice, CallPrice, PutPrice)
-        VALUES (?, ?, ?, ?, ?)
-        """
-        self.cursor.execute(
-            insert_sql, (trade_id, date, underlying_price, call_price, put_price)
-        )
-        self.conn.commit()
-
     def get_open_trades(self):
         """Get all open trades"""
         query = f"""
@@ -622,66 +555,6 @@ class OptionsDatabase:
             return None
 
         return OptionsData(*result)
-
-    def get_current_prices(self, quote_date, strike_price, expire_date):
-        """Get current prices for a specific strike and expiration"""
-        query = """
-        SELECT UNDERLYING_LAST, C_LAST, P_LAST
-        FROM options_data
-        WHERE QUOTE_DATE = ?
-        AND STRIKE = ?
-        AND EXPIRE_DATE = ?
-        """
-        self.cursor.execute(query, (quote_date, strike_price, expire_date))
-        result = self.cursor.fetchone()
-        logging.debug(
-            f"get_current_prices query:\n{query} ({quote_date}, {strike_price}, {expire_date}) => {result}"
-        )
-        return result
-
-    def update_trade_status(
-        self,
-        trade_id,
-        underlying_price,
-        call_price,
-        put_price,
-        quote_date,
-        status="CLOSED",
-        close_reason=None,
-    ):
-        """Update trade with closing prices and status"""
-        closing_premium = call_price + put_price
-        update_sql = f"""
-        UPDATE {self.trades_table}
-        SET Status = ?,
-            UnderlyingPriceClose = ?,
-            CallPriceClose = ?,
-            PutPriceClose = ?,
-            ClosingPremium = ?,
-            ClosedTradeAt = ?,
-            CloseReason = ?
-        WHERE TradeId = ?
-        """
-        self.cursor.execute(
-            update_sql,
-            (
-                status,
-                underlying_price,
-                call_price,
-                put_price,
-                closing_premium,
-                quote_date,
-                close_reason,
-                trade_id,
-            ),
-        )
-        self.conn.commit()
-
-    def disconnect(self):
-        """Close database connection"""
-        if self.conn:
-            logging.info("Closing database connection")
-            self.conn.close()
 
     def get_quote_dates(self, start_date=None, end_date=None):
         """Get all unique quote dates"""
