@@ -46,27 +46,13 @@ def update_open_trades(db, quote_date):
         existing_trade = db.load_trade_with_multiple_legs(
             existing_trade_id, leg_type=LegType.TRADE_OPEN
         )
-        updated_legs = []
-        leg_type = LegType.TRADE_AUDIT
-        # If trade has reached expiry date, close it
+
+        trade_can_be_closed = False
+
         if quote_date >= trade["ExpireDate"]:
-            logging.info(
-                f"Trying to close trade {trade['TradeId']} at expiry {quote_date}"
-            )
-            existing_trade.closing_premium = sum(
-                l.premium_current for l in updated_legs
-            )
-            existing_trade.closed_trade_at = quote_date
-            existing_trade.close_reason = "EXPIRED"
-            db.close_trade(existing_trade_id, existing_trade)
-            logging.info(
-                f"Closed trade {trade['TradeId']} with {existing_trade.closing_premium} at expiry"
-            )
-            leg_type = LegType.TRADE_CLOSE
-        else:
-            logging.info(
-                f"Trade {trade['TradeId']} still open as {quote_date} < {trade['ExpireDate']}"
-            )
+            trade_can_be_closed = True
+
+        updated_legs = []
 
         for leg in existing_trade.legs:
             od: OptionsData = db.get_current_options_data(
@@ -97,7 +83,9 @@ def update_open_trades(db, quote_date):
                 premium_open=leg.premium_open,
                 underlying_price_current=od.underlying_last,
                 premium_current=od.p_last,
-                leg_type=leg_type,
+                leg_type=LegType.TRADE_CLOSE
+                if trade_can_be_closed
+                else LegType.TRADE_AUDIT,
                 delta=od.p_delta,
                 gamma=od.p_gamma,
                 vega=od.p_vega,
@@ -106,6 +94,26 @@ def update_open_trades(db, quote_date):
             )
             updated_legs.append(updated_leg)
             db.update_trade_leg(existing_trade_id, updated_leg)
+
+        # If trade has reached expiry date, close it
+        if trade_can_be_closed:
+            logging.info(
+                f"Trying to close trade {trade['TradeId']} at expiry {quote_date}"
+            )
+            # Multiply by -1 because we reverse the positions (Buying back Short option and Selling Long option)
+            existing_trade.closing_premium = -1 * sum(
+                l.premium_current for l in updated_legs
+            )
+            existing_trade.closed_trade_at = quote_date
+            existing_trade.close_reason = "EXPIRED"
+            db.close_trade(existing_trade_id, existing_trade)
+            logging.info(
+                f"Closed trade {trade['TradeId']} with {existing_trade.closing_premium} at expiry"
+            )
+        else:
+            logging.info(
+                f"Trade {trade['TradeId']} still open as {quote_date} < {trade['ExpireDate']}"
+            )
 
 
 def can_create_new_trade(db, quote_date, trade_delay_days):
