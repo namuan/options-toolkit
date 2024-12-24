@@ -2,6 +2,5 @@
 
 Collection of scripts to help with Options and Backtesting
 
-## Scripts
+![intro.png](assets/trade-plotter.png)
 
-TBC

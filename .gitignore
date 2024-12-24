@@ -9,6 +9,9 @@ __pycache__/
 !README.md
 !Makefile
 
+!docs
+!assets
+
 !logger.py
 !options-calendar-simple.py
 !options-trade-plotter.py
