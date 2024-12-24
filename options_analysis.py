@@ -47,15 +47,15 @@ class Leg:
     def __post_init__(self):
         # Convert premiums after initialization
         self.premium_open = (
-            -self.premium_open
+            -abs(self.premium_open)
             if self.position_type == PositionType.LONG
-            else self.premium_open
+            else abs(self.premium_open)
         )
         if self.premium_current is not None:
             self.premium_current = (
-                -self.premium_current
+                -abs(self.premium_current)
                 if self.position_type == PositionType.LONG
-                else self.premium_current
+                else abs(self.premium_current)
             )
 
     def __str__(self):
@@ -356,7 +356,7 @@ class OptionsDatabase:
     ) -> Trade:
         # First get the trade
         trade_sql = f"""
-        SELECT Date, ExpireDate, DTE, Status, PremiumCaptured,
+        SELECT TradeId, Date, ExpireDate, DTE, Status, PremiumCaptured,
                ClosingPremium, ClosedTradeAt, CloseReason
         FROM {self.trades_table} WHERE TradeId = ?
         """
@@ -414,6 +414,7 @@ class OptionsDatabase:
 
         # Create and return trade
         return Trade(
+            id=trade_row["TradeId"],
             trade_date=trade_row["Date"],
             expire_date=trade_row["ExpireDate"],
             dte=trade_row["DTE"],

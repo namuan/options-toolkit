@@ -187,6 +187,7 @@ class TradeDataProcessor:
                 if (short_diff_match or long_diff_match)
                 else None
             )
+            total_diff = -1 * total_diff
             total_premium_differences.append(total_diff)
 
         return TradeVisualizationData(
