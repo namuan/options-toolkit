@@ -168,7 +168,8 @@ class ShortStraddleStrategy(GenericRunner):
 
 
 def main(args):
-    with ShortStraddleStrategy(args) as runner:
+    table_tag = f"short_straddle_dte_{args.dte}"
+    with ShortStraddleStrategy(args, table_tag) as runner:
         runner.run()
 
 

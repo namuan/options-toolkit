@@ -834,7 +834,7 @@ def passed_trade_delay(options_db, quote_date, trade_delay):
 
 
 class GenericRunner:
-    def __init__(self, args):
+    def __init__(self, args, table_tag):
         self.dte = args.dte
         self.start_date = args.start_date
         self.end_date = args.end_date
@@ -842,7 +842,7 @@ class GenericRunner:
         self.trade_delay = args.trade_delay
         self.profit_take = args.profit_take
         self.stop_loss = args.stop_loss
-        self.table_tag = f"generic_dte_{self.dte}"
+        self.table_tag = table_tag
         self.db = OptionsDatabase(args.db_path, self.table_tag)
 
     def __enter__(self):
