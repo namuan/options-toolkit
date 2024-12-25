@@ -27,9 +27,6 @@ from options_analysis import (
     LegType,
     PositionType,
     Trade,
-    check_profit_take_stop_loss_targets,
-    passed_trade_delay,
-    within_max_open_trades,
 )
 
 
@@ -83,34 +80,17 @@ def parse_args():
     parser.add_argument(
         "--profit-take",
         type=float,
-        default=30.0,
         help="Close position when profit reaches this percentage of premium received",
     )
     parser.add_argument(
         "--stop-loss",
         type=float,
-        default=100.0,
         help="Close position when loss reaches this percentage of premium received",
     )
     return parser.parse_args()
 
 
 class ShortStraddleStrategy(GenericRunner):
-    def allowed_to_create_new_trade(self, options_db, data_for_trade_management):
-        if not within_max_open_trades(
-            options_db, data_for_trade_management.max_open_trades
-        ):
-            return False
-
-        if not passed_trade_delay(
-            options_db,
-            data_for_trade_management.quote_date,
-            data_for_trade_management.trade_delay,
-        ):
-            return False
-
-        return True
-
     def build_trade(self, options_db, quote_date, dte):
         expiry_dte, dte_found = options_db.get_next_expiry_by_dte(quote_date, dte)
         if not expiry_dte:
@@ -205,23 +185,6 @@ class ShortStraddleStrategy(GenericRunner):
             premium_captured=premium_captured_calculated,
             legs=trade_legs,
         )
-
-    def check_if_trade_can_be_closed(
-        self, data_for_trade_management, existing_trade: Trade, updated_legs
-    ):
-        close_reason, trade_can_be_closed = check_profit_take_stop_loss_targets(
-            data_for_trade_management.profit_take,
-            data_for_trade_management.stop_loss,
-            existing_trade,
-            updated_legs,
-        )
-        if trade_can_be_closed:
-            return close_reason, True
-
-        if data_for_trade_management.quote_date >= existing_trade.expire_date:
-            return "EXPIRED", True
-
-        return "", False
 
 
 def main(args):

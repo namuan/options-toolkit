@@ -711,21 +711,15 @@ class DataForTradeManagement:
 def check_profit_take_stop_loss_targets(
     profit_take, stop_loss, existing_trade, updated_legs
 ):
+    if not profit_take or not stop_loss:
+        return "", False
+
     current_premium_value = round(sum(l.premium_current for l in updated_legs), 2)
     total_premium_received = existing_trade.premium_captured
     premium_diff = total_premium_received - current_premium_value
-    logging.info(
-        f"Premium Diff: {total_premium_received=} + {current_premium_value=} = {premium_diff=}"
-    )
-    # Calculate percentage gain/loss
     premium_diff_pct = (premium_diff / total_premium_received) * 100
-    logging.info(
-        f"Trade {existing_trade.id}: Premium Diff: {premium_diff=}/{total_premium_received=} * 100 = {premium_diff_pct=}"
-    )
-    # Profit take: If we've captured the specified percentage of the premium received
     if premium_diff_pct >= profit_take:
         return "PROFIT_TAKE", True
-    # Stop loss: If we've lost the specified percentage of the premium received
     if premium_diff_pct <= -stop_loss:
         return "STOP_LOSS", True
 
@@ -913,16 +907,38 @@ class GenericRunner:
             trade_id = db.create_trade_with_multiple_legs(trade_to_setup)
             logging.info(f"Trade {trade_id} created in database")
 
-    @abstractmethod
     def check_if_trade_can_be_closed(
         self, data_for_trade_management, existing_trade: Trade, updated_legs
     ):
-        pass
+        close_reason, trade_can_be_closed = check_profit_take_stop_loss_targets(
+            data_for_trade_management.profit_take,
+            data_for_trade_management.stop_loss,
+            existing_trade,
+            updated_legs,
+        )
+        if trade_can_be_closed:
+            return close_reason, True
+
+        if data_for_trade_management.quote_date >= existing_trade.expire_date:
+            return "EXPIRED", True
+
+        return "", False
+
+    def allowed_to_create_new_trade(self, options_db, data_for_trade_management):
+        if not within_max_open_trades(
+            options_db, data_for_trade_management.max_open_trades
+        ):
+            return False
+
+        if not passed_trade_delay(
+            options_db,
+            data_for_trade_management.quote_date,
+            data_for_trade_management.trade_delay,
+        ):
+            return False
+
+        return True
 
     @abstractmethod
     def build_trade(self, options_db, quote_date, dte):
-        pass
-
-    @abstractmethod
-    def allowed_to_create_new_trade(self, options_db, data_for_trade_management):
         pass
