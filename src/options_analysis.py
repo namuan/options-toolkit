@@ -1,5 +1,6 @@
 import logging
 import sqlite3
+from abc import abstractmethod
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from enum import Enum
@@ -693,3 +694,224 @@ class OptionsDatabase:
             )
 
         return call_df, put_df
+
+
+# Options Strategy Runner Framework
+
+
+@dataclass
+class DataForTradeManagement:
+    max_open_trades: int
+    trade_delay: int
+    profit_take: float
+    stop_loss: float
+    quote_date: str
+
+
+def check_profit_take_stop_loss_targets(
+    profit_take, stop_loss, existing_trade, updated_legs
+):
+    current_premium_value = round(sum(l.premium_current for l in updated_legs), 2)
+    total_premium_received = existing_trade.premium_captured
+    premium_diff = total_premium_received - current_premium_value
+    logging.info(
+        f"Premium Diff: {total_premium_received=} + {current_premium_value=} = {premium_diff=}"
+    )
+    # Calculate percentage gain/loss
+    premium_diff_pct = (premium_diff / total_premium_received) * 100
+    logging.info(
+        f"Trade {existing_trade.id}: Premium Diff: {premium_diff=}/{total_premium_received=} * 100 = {premium_diff_pct=}"
+    )
+    # Profit take: If we've captured the specified percentage of the premium received
+    if premium_diff_pct >= profit_take:
+        return "PROFIT_TAKE", True
+    # Stop loss: If we've lost the specified percentage of the premium received
+    if premium_diff_pct <= -stop_loss:
+        return "STOP_LOSS", True
+
+    return "UNKNOWN", False
+
+
+def bad_options_data(quote_date, od: OptionsData) -> bool:
+    if not od:
+        logging.warning(f"⚠️ Unable to find options data for {quote_date=}")
+        return True
+
+    if any(price is None for price in (od.underlying_last, od.c_last, od.p_last)):
+        logging.warning(
+            f"⚠️ Bad data found on {quote_date}. One of {od.underlying_last=}, {od.c_last=}, {od.p_last=} is missing"
+        )
+        return True
+    return False
+
+
+def update_legs_with_latest_data(db, existing_trade, quote_date):
+    updated_legs = []
+    for leg in existing_trade.legs:
+        od: OptionsData = db.get_current_options_data(
+            quote_date, leg.strike_price, leg.leg_expiry_date
+        )
+
+        if bad_options_data(quote_date, od):
+            continue
+
+        updated_leg = Leg(
+            leg_quote_date=quote_date,
+            leg_expiry_date=leg.leg_expiry_date,
+            contract_type=leg.contract_type,
+            position_type=leg.position_type,
+            strike_price=leg.strike_price,
+            underlying_price_open=leg.underlying_price_open,
+            premium_open=leg.premium_open,
+            underlying_price_current=od.underlying_last,
+            premium_current=od.p_last
+            if leg.contract_type is ContractType.PUT
+            else od.c_last,
+            leg_type=LegType.TRADE_AUDIT,
+            delta=od.p_delta if leg.contract_type is ContractType.PUT else od.c_delta,
+            gamma=od.p_gamma if leg.contract_type is ContractType.PUT else od.c_gamma,
+            vega=od.p_vega if leg.contract_type is ContractType.PUT else od.c_vega,
+            theta=od.p_theta if leg.contract_type is ContractType.PUT else od.c_theta,
+            iv=od.p_iv if leg.contract_type is ContractType.PUT else od.c_iv,
+        )
+        logging.debug(
+            f"Updating leg {leg.position_type.value} {leg.contract_type.value} -> {updated_leg.premium_current}"
+        )
+        updated_legs.append(updated_leg)
+    return updated_legs
+
+
+def if_passed_trade_delay(options_db, quote_date, trade_delay):
+    """Check if enough time has passed since the last trade"""
+    if trade_delay < 0:
+        return True
+
+    last_open_trade = options_db.get_last_open_trade()
+
+    if last_open_trade.empty:
+        logging.debug("No open trades found. Can create new trade.")
+        return True
+
+    last_trade_date = last_open_trade["Date"].iloc[0]
+
+    last_trade_date = datetime.strptime(last_trade_date, "%Y-%m-%d").date()
+    quote_date = datetime.strptime(quote_date, "%Y-%m-%d").date()
+
+    days_since_last_trade = (quote_date - last_trade_date).days
+
+    if days_since_last_trade >= trade_delay:
+        logging.info(
+            f"Days since last trade: {days_since_last_trade}. Can create new trade."
+        )
+        return True
+    else:
+        logging.debug(
+            f"Only {days_since_last_trade} days since last trade. Waiting for {trade_delay} days."
+        )
+        return False
+
+
+class GenericRunner:
+    def __init__(self, args):
+        self.dte = args.dte
+        self.start_date = args.start_date
+        self.end_date = args.end_date
+        self.max_open_trades = args.max_open_trades
+        self.trade_delay = args.trade_delay
+        self.profit_take = args.profit_take
+        self.stop_loss = args.stop_loss
+        self.table_tag = f"generic_dte_{self.dte}"
+        self.db = OptionsDatabase(args.db_path, self.table_tag)
+
+    def __enter__(self):
+        self.db.connect()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.db.disconnect()
+
+    def run(self):
+        db = self.db
+        db.setup_trades_table()
+        quote_dates = db.get_quote_dates(self.start_date, self.end_date)
+
+        for quote_date in quote_dates:
+            logging.info(f"Processing {quote_date}")
+            data_for_trade_management = DataForTradeManagement(
+                self.max_open_trades,
+                self.trade_delay,
+                self.profit_take,
+                self.stop_loss,
+                quote_date,
+            )
+
+            # Update Open Trades
+            open_trades = db.get_open_trades()
+
+            for _, trade in open_trades.iterrows():
+                existing_trade_id = trade["TradeId"]
+                existing_trade = db.load_trade_with_multiple_legs(
+                    existing_trade_id, leg_type=LegType.TRADE_OPEN
+                )
+                logging.debug(f"Updating existing trade {existing_trade_id}")
+
+                updated_legs = update_legs_with_latest_data(
+                    db, existing_trade, data_for_trade_management.quote_date
+                )
+
+                close_reason, trade_can_be_closed = self.check_if_trade_can_be_closed(
+                    data_for_trade_management, existing_trade, updated_legs
+                )
+
+                for leg in updated_legs:
+                    leg.leg_type = (
+                        LegType.TRADE_CLOSE
+                        if trade_can_be_closed
+                        else LegType.TRADE_AUDIT
+                    )
+                    db.update_trade_leg(existing_trade_id, leg)
+
+                if trade_can_be_closed:
+                    logging.debug(
+                        f"Trying to close trade {trade['TradeId']} at expiry {data_for_trade_management.quote_date}"
+                    )
+                    # Multiply by -1 because we reverse the positions (Buying back Short option and Selling Long option)
+                    existing_trade.closing_premium = round(
+                        -1 * sum(l.premium_current for l in updated_legs), 2
+                    )
+                    existing_trade.closed_trade_at = (
+                        data_for_trade_management.quote_date
+                    )
+                    existing_trade.close_reason = close_reason
+                    db.close_trade(existing_trade_id, existing_trade)
+                    logging.info(
+                        f"Closed trade {trade['TradeId']} with {existing_trade.closing_premium} at expiry"
+                    )
+                else:
+                    logging.debug(
+                        f"Trade {trade['TradeId']} still open as {data_for_trade_management.quote_date} < {trade['ExpireDate']}"
+                    )
+
+            if not self.allowed_to_create_new_trade(db, data_for_trade_management):
+                continue
+
+            trade_to_setup = self.build_trade(db, quote_date, self.dte)
+            if not trade_to_setup:
+                continue
+
+            trade_id = db.create_trade_with_multiple_legs(trade_to_setup)
+            logging.info(f"Trade {trade_id} created in database")
+
+    @abstractmethod
+    def check_if_trade_can_be_closed(
+        self, data_for_trade_management, existing_trade: Trade, updated_legs
+    ):
+        pass
+
+    @abstractmethod
+    def build_trade(self, options_db, quote_date, dte):
+        pass
+
+    @abstractmethod
+    def allowed_to_create_new_trade(self, options_db, data_for_trade_management):
+        pass

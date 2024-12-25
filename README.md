@@ -83,7 +83,6 @@ Quick Run (for Testing)
 
 ### Short Straddle
 
-
 Quick Run (for Testing)
 
 ```shell
@@ -110,28 +109,6 @@ done
 ```shell
 ./src/options-strategy-report.py --db-path data/spx_eod.db --table-tag short_straddle
 ```
-
-
-### Generic Strategy Builder
-
-Quick Run (for Testing)
-
-```shell
-./src/options-run-strategy.py --db-path data/spx_eod.db --dte 45 --start-date 2020-01-01 --end-date 2020-03-30 --max-open-trades 1 -v
-```
-
-```shell
-./src/options-trade-plotter.py --db-path data/spx_eod.db --table-tag generic_dte_45
-```
-
-```shell
-./src/options-strategy-report.py --db-path data/spx_eod.db --table-tag generic
-```
-
-
-
-##
-
 
 ## Drop all Trade and Trade Legs
 
