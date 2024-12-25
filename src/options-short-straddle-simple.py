@@ -54,6 +54,7 @@ def update_open_trades(
         existing_trade = db.load_trade_with_multiple_legs(
             existing_trade_id, leg_type=LegType.TRADE_OPEN
         )
+        logging.debug(f"Updating existing trade {existing_trade_id}")
 
         updated_legs = update_legs_with_latest_data(db, existing_trade, quote_date)
 
@@ -148,13 +149,18 @@ def update_legs_with_latest_data(db, existing_trade, quote_date):
             underlying_price_open=leg.underlying_price_open,
             premium_open=leg.premium_open,
             underlying_price_current=od.underlying_last,
-            premium_current=od.p_last,
+            premium_current=od.p_last
+            if leg.contract_type is ContractType.PUT
+            else od.c_last,
             leg_type=LegType.TRADE_AUDIT,
-            delta=od.p_delta,
-            gamma=od.p_gamma,
-            vega=od.p_vega,
-            theta=od.p_theta,
-            iv=od.p_iv,
+            delta=od.p_delta if leg.contract_type is ContractType.PUT else od.c_delta,
+            gamma=od.p_gamma if leg.contract_type is ContractType.PUT else od.c_gamma,
+            vega=od.p_vega if leg.contract_type is ContractType.PUT else od.c_vega,
+            theta=od.p_theta if leg.contract_type is ContractType.PUT else od.c_theta,
+            iv=od.p_iv if leg.contract_type is ContractType.PUT else od.c_iv,
+        )
+        logging.debug(
+            f"Updating leg {leg.position_type.value} {leg.contract_type.value} -> {updated_leg.premium_current}"
         )
         updated_legs.append(updated_leg)
     return updated_legs

@@ -649,7 +649,7 @@ class OptionsDatabase:
         )
 
         logging.debug(
-            f"Put query: {call_query} with params: {quote_date=}, {expiry_date=}"
+            f"Put query: {put_query} with params: {quote_date=}, {expiry_date=}"
         )
         put_df = pd.read_sql_query(
             put_query, self.conn, params=(quote_date, expiry_date)

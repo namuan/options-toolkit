@@ -25,8 +25,7 @@ Check for any missing data
 
 ### Naked Short Put
 
-Trade every day, Close at Expiry
-Filter: Between dates. 30 DTE
+Quick Run (for Testing)
 
 ```shell
 ./src/options-short-put-simple.py --db-path data/spx_eod.db --dte 30 --start-date 2020-01-01 --end-date 2020-03-30 --max-open-trades 1 --profit-take 10 --stop-loss 75 -v
@@ -56,9 +55,8 @@ for dte in {7..60}; do
 done
 ```
 
-
 ```shell
-./src/options-short-put-trade-plotter.py --db-path data/spx_eod.db --table-tag short_put_dte_30
+./src/options-trade-plotter.py --db-path data/spx_eod.db --table-tag short_put_dte_30
 ```
 
 View Report
@@ -69,15 +67,14 @@ View Report
 
 ### Long Put Calendar
 
-Filter: Between dates. 30 DTE
-Trade every day, Close at Expiry
+Quick Run (for Testing)
 
 ```shell
 ./src/options-calendar-simple.py --db-path data/spx_eod.db --front-dte 30 --back-dte 60 --start-date 2020-01-01 --end-date 2020-03-30 --max-open-trades 1 -v
 ```
 
 ```shell
-./src/options-calendar-trade-plotter.py --db-path data/spx_eod.db --table-tag put_calendar_dte_30_60
+./src/options-trade-plotter.py --db-path data/spx_eod.db --table-tag put_calendar_dte_30_60
 ```
 
 ```shell
@@ -86,11 +83,17 @@ Trade every day, Close at Expiry
 
 ### Short Straddle
 
-Filter: Between dates. 30 DTE
-Trade every day, Close at Expiry
+
+Quick Run (for Testing)
 
 ```shell
-./src/options-short-straddle-simple.py --db-path data/spx_eod.db --dte 45 --start-date 2020-01-01 --end-date 2020-03-30 --max-open-trades 5 -v
+./src/options-short-straddle-simple.py --db-path data/spx_eod.db --dte 45 --start-date 2020-01-01 --end-date 2020-03-30 --max-open-trades 1 -v
+```
+
+Longer Run (Single DTE)
+
+```shell
+./src/options-short-straddle-simple.py --db-path data/spx_eod.db --dte 45 --start-date 2022-01-01 --end-date 2023-12-30 --profit-take 10 --stop-loss 75 --max-open-trades 2 -v
 ```
 
 ```shell
@@ -101,7 +104,7 @@ done
 ```
 
 ```shell
-./src/options-trade-plotter.py --db-path data/spx_eod.db --table-tag put_calendar_dte_30_60
+./src/options-trade-plotter.py --db-path data/spx_eod.db --table-tag short_straddle_dte_45
 ```
 
 ```shell
