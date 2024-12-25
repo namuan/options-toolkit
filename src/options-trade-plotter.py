@@ -29,7 +29,7 @@ from dash import Dash, dcc, html
 from dash.dependencies import Input, Output
 from plotly.subplots import make_subplots
 
-from options_analysis import LegType, OptionsDatabase, Trade
+from options_analysis import LegType, OptionsDatabase, Trade, calculate_date_difference
 
 
 @dataclass
@@ -330,16 +330,11 @@ class DashTradeVisualizer:
             with self._get_db() as db:
                 return self.create_visualization(trade_id, db)
 
-    def calculate_days_between(self, date1_str, date2_str) -> int:
-        date1 = datetime.strptime(date1_str, "%Y-%m-%d").date()
-        date2 = datetime.strptime(date2_str, "%Y-%m-%d").date()
-        return (date1 - date2).days
-
     def create_visualization(self, trade_id: int, db: OptionsDatabase) -> go.Figure:
         trade = db.load_trade_with_multiple_legs(trade_id)
         data = TradeDataProcessor.process_trade_data(trade)
 
-        dte = self.calculate_days_between(data.options_expiry, data.trade_date)
+        dte = calculate_date_difference(data.options_expiry, data.trade_date)
 
         fig = make_subplots(
             rows=5,
@@ -444,10 +439,27 @@ class DashTradeVisualizer:
             col=1,
         )
 
+        days_in_trade = (
+            calculate_date_difference(trade.trade_date, trade.closed_trade_at)
+            if trade.closed_trade_at is not None
+            else calculate_date_difference(
+                trade.trade_date, datetime.now().strftime("%Y-%m-%d")
+            )
+        )
+        premium_gain_loss = (
+            trade.premium_captured + trade.closing_premium
+            if trade.closing_premium is not None
+            else trade.premium_captured
+        )
+        if premium_gain_loss >= 0:
+            gain_loss_color = "green"
+        else:
+            gain_loss_color = "red"
+
         fig.update_layout(
             height=self.config.figure_height,
             title=dict(
-                text=f"<b>Trade Date:</b> {data.trade_date} <b>Strike</b> {data.trade_strike} <b>Expiry:</b> {data.options_expiry} ({dte})",
+                text=f"<b>Trade Date:</b> {data.trade_date} <b>Strike</b> {data.trade_strike} <b>Expiry:</b> {data.options_expiry} ({dte}) <b>In Trade:</b>{days_in_trade} days <b>Gain/Loss:</b> <span style='color:{gain_loss_color};'>${premium_gain_loss:.2f} ({trade.close_reason})</span></span> ",
                 font=dict(family=self.FONT, size=16, color="#2C3E50"),
                 x=0.5,
             ),

@@ -1,11 +1,35 @@
 import logging
 import sqlite3
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, datetime
 from enum import Enum
 from typing import List, Optional
 
 import pandas as pd
+
+
+def calculate_date_difference(
+    date_str1, date_str2, date_format="%Y-%m-%d", unit="days"
+):
+    date1 = datetime.strptime(date_str1, date_format)
+    date2 = datetime.strptime(date_str2, date_format)
+
+    # Calculate the difference as a timedelta object
+    delta = date2 - date1
+
+    # Convert the difference based on the specified unit
+    if unit == "days":
+        return delta.days
+    elif unit == "hours":
+        return delta.total_seconds() / 3600
+    elif unit == "minutes":
+        return delta.total_seconds() / 60
+    elif unit == "seconds":
+        return delta.total_seconds()
+    else:
+        raise ValueError(
+            f"Unsupported unit: {unit}. Use 'days', 'hours', 'minutes', or 'seconds'."
+        )
 
 
 class ContractType(Enum):
