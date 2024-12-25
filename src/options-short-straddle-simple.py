@@ -25,6 +25,7 @@ from options_analysis import (
     GenericRunner,
     Leg,
     LegType,
+    OptionsData,
     PositionType,
     Trade,
 )
@@ -98,46 +99,25 @@ class ShortStraddleStrategy(GenericRunner):
             return None
 
         logging.debug(f"Quote date: {quote_date} -> {expiry_dte=} ({dte_found=:.1f}), ")
-        call_df, put_df = options_db.get_options_by_delta(quote_date, expiry_dte)
-        logging.debug(f"CALL OPTION: \n {call_df.to_string(index=False)}")
-        logging.debug(f"PUT OPTION: \n {put_df.to_string(index=False)}")
 
-        if call_df.empty or put_df.empty:
+        od: OptionsData = options_db.get_options_data_closest_to_price(
+            quote_date, expiry_dte
+        )
+        if not od or od.p_last in [None, 0] or od.c_last in [None, 0]:
             logging.warning(
-                "⚠️ One or more options are not valid. Re-run with debug to see options found for selected DTEs"
-            )
-            return None
-
-        underlying_price = call_df["UNDERLYING_LAST"].iloc[0]
-        strike_price = call_df["CALL_STRIKE"].iloc[0]
-        call_price = call_df["CALL_C_LAST"].iloc[0]
-        put_price = put_df["PUT_P_LAST"].iloc[0]
-
-        # Extract Put Option Greeks
-        call_delta = call_df["CALL_C_DELTA"].iloc[0]
-        call_gamma = call_df["CALL_C_GAMMA"].iloc[0]
-        call_vega = call_df["CALL_C_VEGA"].iloc[0]
-        call_theta = call_df["CALL_C_THETA"].iloc[0]
-        call_iv = call_df["CALL_C_IV"].iloc[0]
-
-        # Extract Put Option Greeks
-        put_delta = put_df["PUT_P_DELTA"].iloc[0]
-        put_gamma = put_df["PUT_P_GAMMA"].iloc[0]
-        put_vega = put_df["PUT_P_VEGA"].iloc[0]
-        put_theta = put_df["PUT_P_THETA"].iloc[0]
-        put_iv = put_df["PUT_P_IV"].iloc[0]
-
-        if put_price in [None, 0] or call_price in [None, 0]:
-            logging.warning(
-                f"⚠️ Bad data found on {quote_date=}. One of {call_price=}, {put_price=} is not valid."
+                "⚠️ Bad data found: "
+                + (
+                    "One or more options are not valid"
+                    if not od
+                    else f"On {quote_date=}, one of {od.c_last=}, {od.p_last=} is not valid"
+                )
             )
             return None
 
         logging.debug(
-            f"Contract ({expiry_dte=}): {underlying_price=:.2f}, {strike_price=:.2f}, {call_price=:.2f}, {put_price=:.2f}"
+            f"Contract ({expiry_dte=}): { od.underlying_last=:.2f}, { od.strike=:.2f}, { od.c_last=:.2f}, { od.p_last=:.2f}"
         )
 
-        # create a multi leg trade in database
         trade_legs = [
             Leg(
                 leg_quote_date=quote_date,
@@ -145,15 +125,15 @@ class ShortStraddleStrategy(GenericRunner):
                 leg_type=LegType.TRADE_OPEN,
                 position_type=PositionType.SHORT,
                 contract_type=ContractType.PUT,
-                strike_price=strike_price,
-                underlying_price_open=underlying_price,
-                premium_open=put_price,
+                strike_price=od.strike,
+                underlying_price_open=od.underlying_last,
+                premium_open=od.p_last,
                 premium_current=0,
-                delta=put_delta,
-                gamma=put_gamma,
-                vega=put_vega,
-                theta=put_theta,
-                iv=put_iv,
+                delta=od.p_delta,
+                gamma=od.p_gamma,
+                vega=od.p_vega,
+                theta=od.p_theta,
+                iv=od.p_iv,
             ),
             Leg(
                 leg_quote_date=quote_date,
@@ -161,15 +141,15 @@ class ShortStraddleStrategy(GenericRunner):
                 leg_type=LegType.TRADE_OPEN,
                 position_type=PositionType.SHORT,
                 contract_type=ContractType.CALL,
-                strike_price=strike_price,
-                underlying_price_open=underlying_price,
-                premium_open=call_price,
+                strike_price=od.strike,
+                underlying_price_open=od.underlying_last,
+                premium_open=od.c_last,
                 premium_current=0,
-                delta=call_delta,
-                gamma=call_gamma,
-                vega=call_vega,
-                theta=call_theta,
-                iv=call_iv,
+                delta=od.c_delta,
+                gamma=od.c_gamma,
+                vega=od.c_vega,
+                theta=od.c_theta,
+                iv=od.c_iv,
             ),
         ]
 

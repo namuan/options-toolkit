@@ -614,6 +614,23 @@ class OptionsDatabase:
             logging.debug(f"No expiration found with DTE > {min_dte} from {quote_date}")
             return None
 
+    def get_options_data_closest_to_price(self, quote_date, expiry_date) -> OptionsData:
+        query = """
+        SELECT
+            *
+        FROM options_data
+        WHERE QUOTE_DATE = ?
+        AND EXPIRE_DATE = ?
+        ORDER BY STRIKE_DISTANCE ASC
+        LIMIT 1
+        """
+        self.cursor.execute(query, (quote_date, expiry_date))
+        result = self.cursor.fetchone()
+        logging.debug(
+            f"get_current_prices query:\n{query} ({quote_date}, {expiry_date}) => {result}"
+        )
+        return OptionsData(*result)
+
     def get_options_by_delta(self, quote_date, expiry_date):
         """
         Get specific call and put options based on delta criteria:
