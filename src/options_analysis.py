@@ -176,8 +176,8 @@ class OptionsDatabase:
         self.db_path = db_path
         self.conn = None
         self.cursor = None
-        self.trades_table = f"trades_dte_{table_tag}"
-        self.trade_legs_table = f"trade_legs_dte_{table_tag}"
+        self.trades_table = f"trades_{table_tag}"
+        self.trade_legs_table = f"trade_legs_{table_tag}"
 
     def __enter__(self) -> "OptionsDatabase":
         """Context manager entry point - connects to database"""

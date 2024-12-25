@@ -205,7 +205,7 @@ def parse_args():
 def main(args):
     front_dte = args.front_dte
     back_dte = args.back_dte
-    table_tag = f"{front_dte}_{back_dte}"
+    table_tag = f"put_calendar_dte_{front_dte}_{back_dte}"
     db = OptionsDatabase(args.db_path, table_tag)
     db.connect()
 

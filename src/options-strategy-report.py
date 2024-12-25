@@ -120,12 +120,13 @@ def display_metrics_table(metrics_dict):
     print("=" * 100)
 
 
-def get_dte_tables(db_path):
+def get_dte_tables(db_path, table_tag):
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
 
+    like_tables = f"trades_{table_tag}_%"
     cursor.execute(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'trades_dte_%';"
+        f"SELECT name FROM sqlite_master WHERE type='table' AND name LIKE '{like_tables}';"
     )
     tables = cursor.fetchall()
 
@@ -478,22 +479,24 @@ def parse_arguments():
         description="Generate equity graphs and calculate portfolio metrics based on trades data from an SQLite database.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-
     parser.add_argument(
         "--db-path", type=str, required=True, help="Path to the SQLite database file"
     )
-
+    parser.add_argument(
+        "--table-tag",
+        type=str,
+        required=True,
+        help="Table tag to identify trades",
+    )
     parser.add_argument(
         "--output", type=str, help="Optional: Path to save the equity graph HTML file"
     )
-
     parser.add_argument(
         "--title",
         type=str,
         default="<< Missing Report Title >> - Cumulative Premium Kept by DTE",
         help="Optional: Title for the equity graph",
     )
-
     return parser.parse_args()
 
 
@@ -501,7 +504,7 @@ def main():
     args = parse_arguments()
 
     print(f"\nFetching data from database: {args.db_path}")
-    dte_tables = get_dte_tables(args.db_path)
+    dte_tables = get_dte_tables(args.db_path, args.table_tag)
 
     if not dte_tables:
         print("No trades_dte tables found in the database.")

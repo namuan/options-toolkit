@@ -36,7 +36,7 @@ Trade every day
 Filter: 30 DTE, PT 10%, SL 75%, Max 5 Trades.
 
 ```shell
-./src/options-short-put-simple.py --db-path data/spx_eod.db --dte 45 --max-open-trades 5 --profit-take 10 --stop-loss 75
+./src/options-short-put-simple.py --db-path data/spx_eod.db --dte 30 --max-open-trades 5 --profit-take 10 --stop-loss 75
 ```
 
 Filter: 30 DTE
@@ -58,13 +58,13 @@ done
 
 
 ```shell
-./src/options-short-put-trade-plotter.py --db-path data/spx_eod.db --table-tag 30
+./src/options-short-put-trade-plotter.py --db-path data/spx_eod.db --table-tag short_put_dte_30
 ```
 
 View Report
 
 ```shell
-./src/options-strategy-report.py --db-path data/spx_eod.db
+./src/options-strategy-report.py --db-path data/spx_eod.db --table-tag short_put
 ```
 
 ### Long Put Calendar
@@ -77,11 +77,11 @@ Trade every day, Close at Expiry
 ```
 
 ```shell
-./src/options-calendar-trade-plotter.py --db-path data/spx_eod.db --front-dte 30 --back-dte 60
+./src/options-calendar-trade-plotter.py --db-path data/spx_eod.db --table-tag put_calendar_dte_30_60
 ```
 
 ```shell
-./src/options-strategy-report.py --db-path data/spx_eod.db
+./src/options-strategy-report.py --db-path data/spx_eod.db --table-tag put_calendar
 ```
 
 ### Short Straddle
@@ -90,7 +90,7 @@ Filter: Between dates. 30 DTE
 Trade every day, Close at Expiry
 
 ```shell
-./src/options-short-straddle-simple.py --db-path data/spx_eod.db --dte 45 --start-date 2023-01-01 --end-date 2023-12-30 --max-open-trades 5 -v
+./src/options-short-straddle-simple.py --db-path data/spx_eod.db --dte 45 --start-date 2020-01-01 --end-date 2020-03-30 --max-open-trades 5 -v
 ```
 
 ```shell
@@ -101,9 +101,15 @@ done
 ```
 
 ```shell
-./src/options-trade-plotter.py --db-path data/spx_eod.db --table-tag 60
+./src/options-trade-plotter.py --db-path data/spx_eod.db --table-tag put_calendar_dte_30_60
 ```
 
 ```shell
-./src/options-strategy-report.py --db-path data/spx_eod.db
+./src/options-strategy-report.py --db-path data/spx_eod.db --table-tag short_straddle
+```
+
+## Drop all Trade and Trade Legs
+
+```shell
+sqlite3 data/spx_eod.db "SELECT 'DROP TABLE IF EXISTS ' || name || ';' FROM sqlite_master WHERE type = 'table' AND (name LIKE 'trades_%' OR name LIKE 'trade_legs_%');" | sqlite3 data/spx_eod.db
 ```

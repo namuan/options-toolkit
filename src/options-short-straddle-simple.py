@@ -254,7 +254,8 @@ def parse_args():
 
 def main(args):
     dte = args.dte
-    db = OptionsDatabase(args.db_path, dte)
+    table_tag = f"short_straddle_dte_{dte}"
+    db = OptionsDatabase(args.db_path, table_tag)
     db.connect()
 
     try:

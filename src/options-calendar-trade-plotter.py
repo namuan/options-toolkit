@@ -227,9 +227,9 @@ class DashTradeVisualizer:
 
     FONT = "Fantasque Sans Mono"
 
-    def __init__(self, db_path: str, front_dte: int, back_dte: int):
+    def __init__(self, db_path: str, table_tag: str):
         self.db_path = db_path
-        self.table_tag = f"{front_dte}_{back_dte}"
+        self.table_tag = table_tag
         self.config = PlotConfig()
         self.app = Dash(__name__)
         self.trade_cache: Dict[int, Trade] = {}
@@ -579,7 +579,7 @@ def main():
     args = parse_args()
 
     # Create visualizer with database path instead of connection
-    visualizer = DashTradeVisualizer(args.db_path, args.front_dte, args.back_dte)
+    visualizer = DashTradeVisualizer(args.db_path, args.table_tag)
     visualizer.run(debug=True)
 
 
@@ -589,16 +589,10 @@ def parse_args():
         "--db-path", required=True, help="Path to the SQLite database file"
     )
     parser.add_argument(
-        "--front-dte",
-        type=int,
+        "--table-tag",
+        type=str,
         required=True,
-        help="Front days to expiration",
-    )
-    parser.add_argument(
-        "--back-dte",
-        type=int,
-        required=True,
-        help="Back days to expiration",
+        help="Table tag to identify trades",
     )
     return parser.parse_args()
 
