@@ -99,7 +99,7 @@ Longer Run (Single DTE)
 ```shell
 for dte in {7..60}; do
     echo "Running for DTE: $dte"
-    ./src/options-short-straddle-simple.py --db-path data/spx_eod.db --dte $dte --start-date 2022-01-01 --end-date 2023-12-30 --max-open-trades 5 -v
+    ./src/options-short-straddle-simple.py --db-path data/spx_eod.db --dte $dte --profit-take 10 --stop-loss 75 --max-open-trades 5 -v
 done
 ```
 
