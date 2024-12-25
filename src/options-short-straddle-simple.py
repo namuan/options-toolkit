@@ -28,7 +28,8 @@ from options_analysis import (
     PositionType,
     Trade,
     check_profit_take_stop_loss_targets,
-    if_passed_trade_delay,
+    passed_trade_delay,
+    within_max_open_trades,
 )
 
 
@@ -96,20 +97,20 @@ def parse_args():
 
 class ShortStraddleStrategy(GenericRunner):
     def allowed_to_create_new_trade(self, options_db, data_for_trade_management):
-        open_trades = options_db.get_open_trades()
-        if len(open_trades) >= data_for_trade_management.max_open_trades:
-            logging.debug(
-                f"Maximum number of open trades ({data_for_trade_management.max_open_trades}) reached. Skipping new trade creation."
-            )
+        if not within_max_open_trades(
+            options_db, data_for_trade_management.max_open_trades
+        ):
             return False
 
-        return if_passed_trade_delay(
+        if not passed_trade_delay(
             options_db,
             data_for_trade_management.quote_date,
             data_for_trade_management.trade_delay,
-        )
+        ):
+            return False
 
-    # abstract
+        return True
+
     def build_trade(self, options_db, quote_date, dte):
         expiry_dte, dte_found = options_db.get_next_expiry_by_dte(quote_date, dte)
         if not expiry_dte:
@@ -205,7 +206,6 @@ class ShortStraddleStrategy(GenericRunner):
             legs=trade_legs,
         )
 
-    # abstract
     def check_if_trade_can_be_closed(
         self, data_for_trade_management, existing_trade: Trade, updated_legs
     ):

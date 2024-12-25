@@ -781,7 +781,18 @@ def update_legs_with_latest_data(db, existing_trade, quote_date):
     return updated_legs
 
 
-def if_passed_trade_delay(options_db, quote_date, trade_delay):
+def within_max_open_trades(options_db, max_open_trades):
+    open_trades = options_db.get_open_trades()
+    if len(open_trades) >= max_open_trades:
+        logging.debug(
+            f"Maximum number of open trades ({max_open_trades}) reached. Skipping new trade creation."
+        )
+        return False
+
+    return True
+
+
+def passed_trade_delay(options_db, quote_date, trade_delay):
     """Check if enough time has passed since the last trade"""
     if trade_delay < 0:
         return True
