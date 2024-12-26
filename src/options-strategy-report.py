@@ -449,9 +449,7 @@ def generate_report(db_path, table_tag, title):
         specs.append([{"type": "table"}])  # Win rate table
         specs.append([{"type": "xy"}])  # Bar chart
 
-    vertical_spacing = 0.01
-
-    each_row_height = 1000
+    each_row_height = 800
     row_heights = [each_row_height] * len(specs)
     total_height = each_row_height * len(specs)
 
@@ -466,7 +464,6 @@ def generate_report(db_path, table_tag, title):
         rows=len(specs),
         cols=1,
         row_heights=row_heights,
-        vertical_spacing=vertical_spacing,
         specs=specs,
         subplot_titles=subplot_titles,
     )
