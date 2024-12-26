@@ -1,7 +1,9 @@
 #!/usr/bin/env -S uv run --quiet --script
 # /// script
 # dependencies = [
-#   "pandas"
+#   "pandas",
+#   "yfinance",
+#   "persistent-cache@git+https://github.com/namuan/persistent-cache",
 # ]
 # ///
 """
@@ -19,6 +21,8 @@ Usage:
 import logging
 from argparse import ArgumentParser, RawDescriptionHelpFormatter
 from typing import Optional
+import pandas as pd
+from pandas import DataFrame
 
 from logger import setup_logging
 from options_analysis import (
@@ -29,8 +33,9 @@ from options_analysis import (
     OptionsData,
     PositionType,
     Trade,
-    add_standard_cli_arguments,
+    add_standard_cli_arguments, OptionsDatabase, DataForTradeManagement,
 )
+from market_data import download_ticker_data
 
 
 def parse_args():
@@ -44,13 +49,63 @@ def parse_args():
         default=30,
         help="Option DTE",
     )
+    # add this boolean argument default to False AI!
     return parser.parse_args()
+
+
+def pull_external_data(options_db: OptionsDatabase) -> DataFrame:
+    quote_dates = options_db.get_quote_dates()
+    symbols = ["^VIX9D", "^VIX"]
+    market_data = {
+        symbol: download_ticker_data(
+            symbol, start=quote_dates[0], end=quote_dates[-1]
+        )
+        for symbol in symbols
+    }
+
+    window1 = 5
+    window2 = 7
+
+    df = pd.DataFrame()
+    df["Short_Term_VIX"] = market_data["^VIX9D"]["Close"]
+    df["Long_Term_VIX"] = market_data["^VIX"]["Close"]
+    df["IVTS"] = df["Short_Term_VIX"] / df["Long_Term_VIX"]
+    df["Signal_Raw"] = (df["IVTS"] < 1).astype(int) * 2 - 1
+    df[f"IVTS_Med{window1}"] = df["IVTS"].rolling(window=window1).median()
+    df[f"IVTS_Med{window2}"] = df["IVTS"].rolling(window=window2).median()
+    df[f"Signal_Med{window1}"] = (df[f"IVTS_Med{window1}"] < 1).astype(int) * 2 - 1
+    df[f"Signal_Med{window2}"] = (df[f"IVTS_Med{window2}"] < 1).astype(int) * 2 - 1
+    return df
 
 
 class ShortStraddleStrategy(GenericRunner):
     def __init__(self, args, table_tag):
         super().__init__(args, table_tag)
         self.dte = args.dte
+        self.external_df = pull_external_data(self.db)
+
+    def in_high_vol_regime(self, quote_date) -> bool:
+        high_vol_regime_flag = False
+        try:
+            signal_raw_value = self.external_df.loc[quote_date, "Signal_Raw"]
+            if signal_raw_value == 1:
+                high_vol_regime_flag = False
+            else:
+                logging.info(
+                    f"High Vol environment. The Signal_Raw value for {quote_date} is not 1. It is {signal_raw_value}"
+                )
+                high_vol_regime_flag = True
+        except KeyError:
+            logging.debug(f"Date {quote_date} not found in DataFrame.")
+
+        return high_vol_regime_flag
+
+    def allowed_to_create_new_trade(self, options_db, data_for_trade_management: DataForTradeManagement):
+        allowed_based_on_default_checks = super().allowed_to_create_new_trade(options_db, data_for_trade_management)
+        if not allowed_based_on_default_checks:
+            return False
+
+        return self.in_high_vol_regime(data_for_trade_management.quote_date)
 
     def build_trade(self, options_db, quote_date) -> Optional[Trade]:
         expiry_dte, dte_found = options_db.get_next_expiry_by_dte(quote_date, self.dte)
