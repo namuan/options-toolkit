@@ -55,6 +55,7 @@ def parse_args():
         default=False,
         help="Enable high volatility check",
     )
+    # Add an int argument here "high-vol-check-window" AI!
     return parser.parse_args()
 
 
@@ -68,18 +69,15 @@ def pull_external_data(options_db: OptionsDatabase) -> DataFrame:
         for symbol in symbols
     }
 
-    window1 = 5
-    window2 = 7
+    window = 5
 
     df = pd.DataFrame()
     df["Short_Term_VIX"] = market_data["^VIX9D"]["Close"]
     df["Long_Term_VIX"] = market_data["^VIX"]["Close"]
     df["IVTS"] = df["Short_Term_VIX"] / df["Long_Term_VIX"]
     df["Signal_Raw"] = (df["IVTS"] < 1).astype(int) * 2 - 1
-    df[f"IVTS_Med{window1}"] = df["IVTS"].rolling(window=window1).median()
-    df[f"IVTS_Med{window2}"] = df["IVTS"].rolling(window=window2).median()
-    df[f"Signal_Med{window1}"] = (df[f"IVTS_Med{window1}"] < 1).astype(int) * 2 - 1
-    df[f"Signal_Med{window2}"] = (df[f"IVTS_Med{window2}"] < 1).astype(int) * 2 - 1
+    df[f"IVTS_Med_{window}"] = df["IVTS"].rolling(window=window).median()
+    df[f"Signal_Med_{window}"] = (df[f"IVTS_Med{window}"] < 1).astype(int) * 2 - 1
     return df
 
 
@@ -87,7 +85,11 @@ class ShortStraddleStrategy(GenericRunner):
     def __init__(self, args, table_tag):
         super().__init__(args, table_tag)
         self.dte = args.dte
-        self.external_df = pull_external_data(self.db)
+        self.high_vol_check_required = args.high_vol_check
+        if self.high_vol_check_required:
+            self.external_df = pull_external_data(self.db)
+        else:
+            self.external_df = None
 
     def in_high_vol_regime(self, quote_date) -> bool:
         high_vol_regime_flag = False
@@ -109,6 +111,9 @@ class ShortStraddleStrategy(GenericRunner):
         allowed_based_on_default_checks = super().allowed_to_create_new_trade(options_db, data_for_trade_management)
         if not allowed_based_on_default_checks:
             return False
+
+        if not self.high_vol_check_required:
+            return True
 
         return self.in_high_vol_regime(data_for_trade_management.quote_date)
 
