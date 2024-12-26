@@ -568,19 +568,82 @@ def generate_report(db_path, table_tag, title):
         return
 
     monthly_win_rates_dict = calculate_monthly_win_rates_per_dte(dfs_dict)
-    fig = plot_equity_graph(dfs_dict, title)
-    fig = add_metrics_to_figure(fig, metrics_dict)
 
-    current_row = 3
+    # Calculate total number of subplots needed (2 per DTE: monthly win rates + win/loss analysis)
+    total_rows = len(dfs_dict.keys()) * 2
+    specs = []
+    for _ in range(total_rows):
+        specs.append([{"type": "table"}])
+
+    subplot_titles = []
     for dte in sorted(dfs_dict.keys()):
+        subplot_titles.extend(
+            [
+                f"DTE {dte} - Monthly Win Rate Analysis",
+                f"DTE {dte} - Win/Loss Count Analysis",
+            ]
+        )
+
+    fig = make_subplots(
+        rows=total_rows,
+        cols=1,
+        subplot_titles=subplot_titles,
+        vertical_spacing=0.03,
+        specs=specs,
+    )
+
+    current_row = 1
+    for dte in sorted(dfs_dict.keys()):
+        # Add monthly win rates
         fig = add_win_rates_to_figure(fig, monthly_win_rates_dict[dte], current_row)
         current_row += 1
 
-    win_loss_fig = display_win_loss_analysis(win_loss_analysis_dict)
-    fig.show()
-    win_loss_fig.show()
+        # Add win/loss analysis
+        all_rows = []
+        for year, monthly_data in win_loss_analysis_dict[dte].items():
+            for month_stats in monthly_data:
+                all_rows.append(
+                    [
+                        f"{year} {month_stats['Month']}",
+                        month_stats["Winning Trade Count"],
+                        month_stats["Losing Trade Count"],
+                    ]
+                )
 
-    return fig, win_loss_fig
+        if all_rows:
+            fig.add_trace(
+                go.Table(
+                    header=dict(
+                        values=["Month", "Winning Trade Count", "Losing Trade Count"],
+                        fill_color="paleturquoise",
+                        align="center",
+                        font=dict(size=12),
+                    ),
+                    cells=dict(
+                        values=list(zip(*all_rows)),
+                        fill_color=[
+                            ["white"] * len(all_rows),
+                            ["#e6ffe6"] * len(all_rows),
+                            ["#ffe6e6"] * len(all_rows),
+                        ],
+                        align="center",
+                        font=dict(size=11),
+                    ),
+                ),
+                row=current_row,
+                col=1,
+            )
+            current_row += 1
+
+    fig.update_layout(
+        height=300 * total_rows,
+        showlegend=False,
+        title_text=title if title else "Strategy Analysis",
+        margin=dict(t=30, b=10),
+    )
+
+    fig.show()
+    return fig
 
 
 def analyze_win_loss_trades(df):
