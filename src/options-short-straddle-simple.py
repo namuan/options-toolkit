@@ -204,7 +204,9 @@ class ShortStraddleStrategy(GenericRunner):
 
 def main(args):
     if args.high_vol_check:
-        table_tag = f"short_straddle_dte_{args.dte}_{args.high_vol_check_window}"
+        table_tag = f"short_straddle_dte_{args.dte}_{args.high_vol_check_window}_{args.force_close_after_days}"
+    elif args.force_close_after_days:
+        table_tag = f"short_straddle_dte_{args.dte}_{args.force_close_after_days}"
     else:
         table_tag = f"short_straddle_dte_{args.dte}"
 

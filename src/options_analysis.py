@@ -863,7 +863,6 @@ def add_standard_cli_arguments(parser):
     parser.add_argument(
         "--force-close-after-days",
         type=int,
-        default=100,
         help="Force close trade after days",
     )
     parser.add_argument(
@@ -891,6 +890,9 @@ def add_standard_cli_arguments(parser):
 
 
 def check_if_passed_days(data_for_trade_management, existing_trade):
+    if not data_for_trade_management.force_close_after_days:
+        return False
+
     trade_start_date = existing_trade.trade_date
     current_date = data_for_trade_management.quote_date
     days_passed = calculate_date_difference(trade_start_date, current_date)
