@@ -55,7 +55,12 @@ def parse_args():
         default=False,
         help="Enable high volatility check",
     )
-    # Add an int argument here "high-vol-check-window" AI!
+    parser.add_argument(
+        "--high-vol-check-window",
+        type=int,
+        default=5,
+        help="Window size for high volatility check",
+    )
     return parser.parse_args()
 
 
