@@ -101,13 +101,13 @@ echo "Should see 2 trades"
 
 ```shell
 ./src/options-calendar-simple.py --db-path data/spx_eod.db --front-dte 30 --back-dte 60 --start-date 2020-01-01 --end-date 2020-03-30 --max-open-trades 1 -v
+echo "Should see 3 trades"
 ```
 
 ```shell
 ./src/options-short-put-simple.py --db-path data/spx_eod.db --dte 30 --start-date 2020-01-01 --end-date 2020-03-30 --max-open-trades 1 --profit-take 10 --stop-loss 75 -v
 echo "Should see 24 trades"
 ```
-
 
 ## Drop all Trade and Trade Legs
 

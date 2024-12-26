@@ -20,18 +20,21 @@ Usage:
 import logging
 from argparse import ArgumentParser, RawDescriptionHelpFormatter
 from datetime import datetime
+from typing import Optional
 
 import pandas as pd
 
 from logger import setup_logging
 from options_analysis import (
     ContractType,
+    GenericRunner,
     Leg,
     LegType,
     OptionsData,
     OptionsDatabase,
     PositionType,
     Trade,
+    add_standard_cli_arguments,
 )
 
 pd.set_option("display.float_format", lambda x: "%.4f" % x)
@@ -150,19 +153,7 @@ def parse_args():
     parser = ArgumentParser(
         description=__doc__, formatter_class=RawDescriptionHelpFormatter
     )
-    parser.add_argument(
-        "-v",
-        "--verbose",
-        action="count",
-        default=0,
-        dest="verbose",
-        help="Increase verbosity of logging output",
-    )
-    parser.add_argument(
-        "--db-path",
-        required=True,
-        help="Path to the SQLite database file",
-    )
+    add_standard_cli_arguments(parser)
     parser.add_argument(
         "--front-dte",
         type=int,
@@ -175,186 +166,107 @@ def parse_args():
         default=60,
         help="Back Option DTE",
     )
-    parser.add_argument(
-        "--max-open-trades",
-        type=int,
-        default=99,
-        help="Maximum number of open trades allowed at a given time",
-    )
-    parser.add_argument(
-        "--trade-delay",
-        type=int,
-        default=-1,
-        help="Minimum number of days to wait between new trades",
-    )
-    parser.add_argument(
-        "-sd",
-        "--start-date",
-        type=str,
-        help="Start date for backtesting",
-    )
-    parser.add_argument(
-        "-ed",
-        "--end-date",
-        type=str,
-        help="End date for backtesting",
-    )
     return parser.parse_args()
+
+
+class LongPutCalendarStrategy(GenericRunner):
+    def __init__(self, args, table_tag):
+        super().__init__(args, table_tag)
+        self.front_dte = args.front_dte
+        self.back_dte = args.back_dte
+
+    def build_trade(self, options_db: OptionsDatabase, quote_date) -> Optional[Trade]:
+        expiry_front_dte, front_dte_found = options_db.get_next_expiry_by_dte(
+            quote_date, self.front_dte
+        )
+
+        expiry_back_dte, back_dte_found = options_db.get_next_expiry_by_dte(
+            quote_date, self.back_dte
+        )
+
+        if not expiry_front_dte or not expiry_back_dte:
+            logging.warning(
+                f"⚠️ Unable to find front {self.front_dte} or back {self.back_dte} expiry. {expiry_front_dte=}, {expiry_back_dte=} "
+            )
+            return None
+
+        logging.debug(
+            f"Quote date: {quote_date} -> {expiry_front_dte=} ({front_dte_found=:.1f}), "
+            f"{expiry_back_dte=} ({back_dte_found=:.1f})"
+        )
+
+        front_od: OptionsData = options_db.get_options_data_closest_to_price(
+            quote_date, expiry_front_dte
+        )
+        back_od: OptionsData = options_db.get_options_data_closest_to_price(
+            quote_date, expiry_back_dte
+        )
+
+        if not front_od or not back_od:
+            logging.warning(
+                "⚠️ One or more options are not valid. Re-run with debug to see options found for selected DTEs"
+            )
+            return None
+
+        if front_od.p_last is None or back_od.p_last is None:
+            logging.warning(
+                f"⚠️ Bad data found on {quote_date}. One of {front_od.p_last=}, {back_od.p_last=} is not valid."
+            )
+            return None
+
+        trade_legs = [
+            Leg(
+                leg_quote_date=quote_date,
+                leg_expiry_date=expiry_front_dte,
+                leg_type=LegType.TRADE_OPEN,
+                position_type=PositionType.SHORT,
+                contract_type=ContractType.PUT,
+                strike_price=front_od.strike,
+                underlying_price_open=front_od.underlying_last,
+                premium_open=front_od.p_last,
+                premium_current=0,
+                delta=front_od.p_delta,
+                gamma=front_od.p_gamma,
+                vega=front_od.p_vega,
+                theta=front_od.p_theta,
+                iv=front_od.p_iv,
+            ),
+            Leg(
+                leg_quote_date=quote_date,
+                leg_expiry_date=expiry_back_dte,
+                leg_type=LegType.TRADE_OPEN,
+                position_type=PositionType.LONG,
+                contract_type=ContractType.PUT,
+                strike_price=back_od.strike,
+                underlying_price_open=back_od.underlying_last,
+                premium_open=back_od.p_last,
+                premium_current=0,
+                delta=back_od.p_delta,
+                gamma=back_od.p_gamma,
+                vega=back_od.p_vega,
+                theta=back_od.p_theta,
+                iv=back_od.p_iv,
+            ),
+        ]
+        premium_captured_calculated = round(
+            sum(leg.premium_open for leg in trade_legs), 2
+        )
+        return Trade(
+            trade_date=quote_date,
+            expire_date=expiry_front_dte,
+            dte=self.front_dte,
+            status="OPEN",
+            premium_captured=premium_captured_calculated,
+            legs=trade_legs,
+        )
 
 
 def main(args):
     front_dte = args.front_dte
     back_dte = args.back_dte
     table_tag = f"put_calendar_dte_{front_dte}_{back_dte}"
-    db = OptionsDatabase(args.db_path, table_tag)
-    db.connect()
-
-    try:
-        db.setup_trades_table()
-        quote_dates = db.get_quote_dates(args.start_date, args.end_date)
-
-        for quote_date in quote_dates:
-            logging.info(f"Processing {quote_date}")
-
-            update_open_trades(db, quote_date)
-
-            # Check if maximum number of open trades has been reached
-            open_trades = db.get_open_trades()
-            if len(open_trades) >= args.max_open_trades:
-                logging.debug(
-                    f"Maximum number of open trades ({args.max_open_trades}) reached. Skipping new trade creation."
-                )
-                continue
-
-            expiry_front_dte, front_dte_found = db.get_next_expiry_by_dte(
-                quote_date, front_dte
-            )
-            expiry_back_dte, back_dte_found = db.get_next_expiry_by_dte(
-                quote_date, back_dte
-            )
-            if not expiry_front_dte or not expiry_back_dte:
-                logging.warning(
-                    f"⚠️ Unable to find front {front_dte} or back {back_dte} expiry. {expiry_front_dte=}, {expiry_back_dte=} "
-                )
-                continue
-
-            logging.debug(
-                f"Quote date: {quote_date} -> {expiry_front_dte=} ({front_dte_found=:.1f}), "
-                f"{expiry_back_dte=} ({back_dte_found=:.1f})"
-            )
-            front_call_df, front_put_df = db.get_options_by_delta(
-                quote_date, expiry_front_dte
-            )
-            back_call_df, back_put_df = db.get_options_by_delta(
-                quote_date, expiry_back_dte
-            )
-
-            # Only look at PUTs For now. We are only looking at Calendar PUT Spread
-            logging.debug("Front Option")
-            logging.debug(f"=> PUT OPTION: \n {front_put_df.to_string(index=False)}")
-
-            logging.debug("Back Option")
-            logging.debug(f"=> PUT OPTION: \n {back_put_df.to_string(index=False)}")
-
-            if front_put_df.empty or back_put_df.empty:
-                logging.warning(
-                    "⚠️ One or more options are not valid. Re-run with debug to see options found for selected DTEs"
-                )
-                continue
-
-            front_underlying_price = front_call_df["UNDERLYING_LAST"].iloc[0]
-            front_strike_price = front_call_df["CALL_STRIKE"].iloc[0]
-            front_call_price = front_call_df["CALL_C_LAST"].iloc[0]
-            front_put_price = front_put_df["PUT_P_LAST"].iloc[0]
-
-            # Extract Put Option Greeks
-            front_put_delta = front_put_df["PUT_P_DELTA"].iloc[0]
-            front_put_gamma = front_put_df["PUT_P_GAMMA"].iloc[0]
-            front_put_vega = front_put_df["PUT_P_VEGA"].iloc[0]
-            front_put_theta = front_put_df["PUT_P_THETA"].iloc[0]
-            front_put_iv = front_put_df["PUT_P_IV"].iloc[0]
-
-            back_underlying_price = back_call_df["UNDERLYING_LAST"].iloc[0]
-            back_strike_price = back_call_df["CALL_STRIKE"].iloc[0]
-            back_call_price = back_call_df["CALL_C_LAST"].iloc[0]
-            back_put_price = back_put_df["PUT_P_LAST"].iloc[0]
-
-            # Extract Put Option Greeks
-            back_put_delta = back_put_df["PUT_P_DELTA"].iloc[0]
-            back_put_gamma = back_put_df["PUT_P_GAMMA"].iloc[0]
-            back_put_vega = back_put_df["PUT_P_VEGA"].iloc[0]
-            back_put_theta = back_put_df["PUT_P_THETA"].iloc[0]
-            back_put_iv = back_put_df["PUT_P_IV"].iloc[0]
-
-            if (
-                front_call_price is None
-                or front_put_price is None
-                or back_call_price is None
-                or back_put_price is None
-            ):
-                logging.warning(
-                    f"⚠️ Bad data found on {quote_date}. One of {front_call_price}, {front_put_price}, {back_call_price}, {back_put_price} is not valid."
-                )
-                continue
-
-            logging.debug(
-                f"Front Contract (Expiry {expiry_front_dte}): Underlying Price={front_underlying_price:.2f}, Strike Price={front_strike_price:.2f}, Call Price={front_call_price:.2f}, Put Price={front_put_price:.2f}"
-            )
-            logging.debug(
-                f"Back Contract (Expiry {expiry_back_dte}): Underlying Price={back_underlying_price:.2f}, Strike Price={back_strike_price:.2f}, Call Price={back_call_price:.2f}, Put Price={back_put_price:.2f}"
-            )
-
-            # create a multi leg trade in database
-            trade_legs = [
-                Leg(
-                    leg_quote_date=quote_date,
-                    leg_expiry_date=expiry_front_dte,
-                    leg_type=LegType.TRADE_OPEN,
-                    position_type=PositionType.SHORT,
-                    contract_type=ContractType.PUT,
-                    strike_price=front_strike_price,
-                    underlying_price_open=front_underlying_price,
-                    premium_open=front_put_price,
-                    premium_current=0,
-                    delta=front_put_delta,
-                    gamma=front_put_gamma,
-                    vega=front_put_vega,
-                    theta=front_put_theta,
-                    iv=front_put_iv,
-                ),
-                Leg(
-                    leg_quote_date=quote_date,
-                    leg_expiry_date=expiry_back_dte,
-                    leg_type=LegType.TRADE_OPEN,
-                    position_type=PositionType.LONG,
-                    contract_type=ContractType.PUT,
-                    strike_price=back_strike_price,
-                    underlying_price_open=back_underlying_price,
-                    premium_open=back_put_price,
-                    premium_current=0,
-                    delta=back_put_delta,
-                    gamma=back_put_gamma,
-                    vega=back_put_vega,
-                    theta=back_put_theta,
-                    iv=back_put_iv,
-                ),
-            ]
-            premium_captured_calculated = round(
-                sum(leg.premium_open for leg in trade_legs), 2
-            )
-            trade = Trade(
-                trade_date=quote_date,
-                expire_date=expiry_front_dte,
-                dte=front_dte,
-                status="OPEN",
-                premium_captured=premium_captured_calculated,
-                legs=trade_legs,
-            )
-            trade_id = db.create_trade_with_multiple_legs(trade)
-            logging.info(f"Trade {trade_id} created in database")
-
-    finally:
-        db.disconnect()
+    with LongPutCalendarStrategy(args, table_tag) as strategy:
+        strategy.run()
 
 
 if __name__ == "__main__":
