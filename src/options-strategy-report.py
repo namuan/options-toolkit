@@ -352,7 +352,6 @@ def display_win_loss_analysis(metrics_dict):
         rows=total_tables,
         cols=1,
         subplot_titles=subplot_titles,
-        vertical_spacing=0.2,
         specs=specs,
     )
 
@@ -449,9 +448,10 @@ def generate_report(db_path, table_tag, title):
         specs.append([{"type": "table"}])  # Win rate table
         specs.append([{"type": "xy"}])  # Bar chart
 
+    total_rows = len(specs)
     each_row_height = 800
-    row_heights = [each_row_height] * len(specs)
-    total_height = each_row_height * len(specs)
+    row_heights = [each_row_height] * total_rows
+    total_height = each_row_height * total_rows
 
     # Create subplot titles
     subplot_titles = ["Equity Graph", "Performance Metrics by DTE"]
@@ -461,7 +461,7 @@ def generate_report(db_path, table_tag, title):
         )
 
     fig = make_subplots(
-        rows=len(specs),
+        rows=total_rows,
         cols=1,
         row_heights=row_heights,
         specs=specs,
