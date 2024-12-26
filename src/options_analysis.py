@@ -720,6 +720,7 @@ class OptionsDatabase:
 class DataForTradeManagement:
     max_open_trades: int
     trade_delay: int
+    force_close_after_days: int
     profit_take: float
     stop_loss: float
     quote_date: str
@@ -860,6 +861,12 @@ def add_standard_cli_arguments(parser):
         help="Minimum number of days to wait between new trades",
     )
     parser.add_argument(
+        "--force-close-after-days",
+        type=int,
+        default=100,
+        help="Force close trade after days",
+    )
+    parser.add_argument(
         "-sd",
         "--start-date",
         type=str,
@@ -883,12 +890,20 @@ def add_standard_cli_arguments(parser):
     )
 
 
+def check_if_passed_days(data_for_trade_management, existing_trade):
+    trade_start_date = existing_trade.trade_date
+    current_date = data_for_trade_management.quote_date
+    days_passed = calculate_date_difference(trade_start_date, current_date)
+    return days_passed >= data_for_trade_management.force_close_after_days
+
+
 class GenericRunner:
     def __init__(self, args, table_tag):
         self.start_date = args.start_date
         self.end_date = args.end_date
         self.max_open_trades = args.max_open_trades
         self.trade_delay = args.trade_delay
+        self.force_close_after_days = args.force_close_after_days
         self.profit_take = args.profit_take
         self.stop_loss = args.stop_loss
         self.table_tag = table_tag
@@ -913,6 +928,7 @@ class GenericRunner:
             data_for_trade_management = DataForTradeManagement(
                 self.max_open_trades,
                 self.trade_delay,
+                self.force_close_after_days,
                 self.profit_take,
                 self.stop_loss,
                 quote_date,
@@ -989,6 +1005,9 @@ class GenericRunner:
 
         if data_for_trade_management.quote_date >= existing_trade.expire_date:
             return "EXPIRED", True
+
+        if check_if_passed_days(data_for_trade_management, existing_trade):
+            return "FORCE_CLOSED_AFTER_DAYS", True
 
         return "", False
 
