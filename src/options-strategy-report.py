@@ -147,7 +147,9 @@ def fetch_data(db_path, table_name):
         Date,
         PremiumCaptured,
         ClosingPremium,
-        (PremiumCaptured + ClosingPremium) AS PremiumKept
+        (PremiumCaptured + ClosingPremium) AS PremiumKept,
+        ClosedTradeAt,
+        CloseReason
     FROM {table_name};
     """
 
@@ -474,6 +476,70 @@ def calculate_monthly_win_rates_per_dte(dfs_dict):
     return monthly_win_rates_dict
 
 
+def display_win_loss_analysis(metrics_dict):
+    total_tables = sum(1 for _ in metrics_dict.keys())
+    specs = [[{"type": "table"}] for _ in range(total_tables)]
+
+    subplot_titles = []
+    for dte in metrics_dict.keys():
+        subplot_titles.append(f"DTE {dte} - Monthly Win/Loss Analysis")
+
+    fig = make_subplots(
+        rows=total_tables,
+        cols=1,
+        subplot_titles=subplot_titles,
+        vertical_spacing=0.05,
+        specs=specs,
+    )
+
+    row = 1
+    for dte, yearly_data in metrics_dict.items():
+        all_rows = []
+        for year, monthly_data in yearly_data.items():
+            for month_stats in monthly_data:
+                all_rows.append(
+                    [
+                        f"{year} {month_stats['Month']}",
+                        month_stats["Winning Trade Count"],
+                        month_stats["Losing Trade Count"],
+                    ]
+                )
+
+        if all_rows:
+            fig.add_trace(
+                go.Table(
+                    header=dict(
+                        values=["Month", "Winning Trade Count", "Losing Trade Count"],
+                        fill_color="paleturquoise",
+                        align="center",
+                        font=dict(size=12),
+                    ),
+                    cells=dict(
+                        values=list(zip(*all_rows)),
+                        fill_color=[
+                            ["white"] * len(all_rows),
+                            ["#e6ffe6"] * len(all_rows),
+                            ["#ffe6e6"] * len(all_rows),
+                        ],
+                        align="center",
+                        font=dict(size=11),
+                    ),
+                ),
+                row=row,
+                col=1,
+            )
+            row += 1
+
+    fig.update_layout(
+        height=400 * total_tables,
+        showlegend=False,
+        title_text="Monthly Win/Loss Count Analysis by DTE",
+        margin=dict(t=30, b=10),
+    )
+
+    return fig
+
+
 def generate_report(db_path, table_tag, title):
     print(f"\nFetching data from database: {db_path}")
     dte_tables = get_dte_tables(db_path, table_tag)
@@ -486,6 +552,7 @@ def generate_report(db_path, table_tag, title):
 
     dfs_dict = {}
     metrics_dict = {}
+    win_loss_analysis_dict = {}
 
     for table in dte_tables:
         dte = int(table.split("_")[-1])
@@ -494,29 +561,58 @@ def generate_report(db_path, table_tag, title):
         if not df.empty:
             dfs_dict[dte] = df
             metrics_dict[dte] = calculate_portfolio_metrics(df)
+            win_loss_analysis_dict[dte] = analyze_win_loss_trades(df)
 
     if not dfs_dict:
         print("No data found in any of the tables.")
         return
 
-    # Calculate monthly win rates for each DTE
     monthly_win_rates_dict = calculate_monthly_win_rates_per_dte(dfs_dict)
-
-    # Create main figure with equity graph
     fig = plot_equity_graph(dfs_dict, title)
-
-    # Add metrics table
     fig = add_metrics_to_figure(fig, metrics_dict)
 
-    # Add win rate tables for each DTE
-    current_row = 3  # Starting after equity graph and metrics table
+    current_row = 3
     for dte in sorted(dfs_dict.keys()):
         fig = add_win_rates_to_figure(fig, monthly_win_rates_dict[dte], current_row)
         current_row += 1
 
+    win_loss_fig = display_win_loss_analysis(win_loss_analysis_dict)
     fig.show()
+    win_loss_fig.show()
 
-    return fig
+    return fig, win_loss_fig
+
+
+def analyze_win_loss_trades(df):
+    df["TotalPremium"] = df["PremiumCaptured"] + df["ClosingPremium"]
+    df["TradeResult"] = df["TotalPremium"].apply(lambda x: "Win" if x > 0 else "Loss")
+    df["Year"] = pd.to_datetime(df["Date"]).dt.year
+    df["Month"] = pd.to_datetime(df["Date"]).dt.month
+
+    yearly_analysis = {}
+
+    for year in df["Year"].unique():
+        year_data = df[df["Year"] == year]
+        monthly_stats = []
+
+        for month in range(1, 13):
+            month_data = year_data[year_data["Month"] == month]
+            winning_trades = month_data[month_data["TradeResult"] == "Win"]
+            losing_trades = month_data[month_data["TradeResult"] == "Loss"]
+
+            if len(month_data) > 0:
+                monthly_stats.append(
+                    {
+                        "Month": pd.Timestamp(2024, month, 1).strftime("%B"),
+                        "Winning Trade Count": len(winning_trades),
+                        "Losing Trade Count": len(losing_trades),
+                    }
+                )
+
+        if monthly_stats:
+            yearly_analysis[year] = monthly_stats
+
+    return yearly_analysis
 
 
 def parse_arguments():
