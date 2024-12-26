@@ -73,53 +73,6 @@ def calculate_portfolio_metrics(df):
     return metrics
 
 
-def create_metrics_table(metrics_dict):
-    # Convert metrics dictionary to DataFrame with metrics as columns
-    metrics_df = pd.DataFrame.from_dict(metrics_dict, orient="index")
-
-    # Rename the index to show "DTE" prefix
-    metrics_df.index = [dte for dte in metrics_df.index]
-
-    # Create table figure
-    table = go.Figure(
-        data=[
-            go.Table(
-                header=dict(
-                    values=["DTE"] + list(metrics_df.columns),
-                    fill_color="paleturquoise",
-                    align="left",
-                    font=dict(size=12),
-                ),
-                cells=dict(
-                    values=[metrics_df.index]
-                    + [metrics_df[col] for col in metrics_df.columns],
-                    fill_color="lavender",
-                    align="left",
-                    font=dict(size=11),
-                ),
-            )
-        ]
-    )
-
-    table.update_layout(
-        title="Trading Performance Metrics by DTE",
-        height=len(metrics_df) * 30 + 100,  # Adjust height based on number of rows
-        margin=dict(l=0, r=0, t=30, b=0),
-    )
-
-    return table
-
-
-def display_metrics_table(metrics_dict):
-    metrics_df = pd.DataFrame.from_dict(metrics_dict, orient="index")
-    metrics_df.index.name = "Metric"
-
-    print("\nTrading Performance Metrics:")
-    print("=" * 100)
-    print(metrics_df.to_string())
-    print("=" * 100)
-
-
 def get_dte_tables(db_path, table_tag):
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
@@ -160,77 +113,8 @@ def fetch_data(db_path, table_name):
     return df
 
 
-def calculate_total_subplot_heights(dfs_dict):
-    num_dtes = len(dfs_dict)
-
-    # Heights for different components
-    equity_graph_height = 800
-    metrics_table_height = (num_dtes + 1) * 40  # +1 for header
-
-    # Calculate win rates table heights
-    win_rates_table_heights = []
-    for dte in dfs_dict.keys():
-        num_years = len(set(pd.to_datetime(dfs_dict[dte]["Date"]).dt.year))
-        table_height = (num_years + 1) * 70
-        win_rates_table_heights.append(table_height)
-
-    total_win_rates_height = sum(win_rates_table_heights)
-
-    # Total height including padding
-    total_height = (
-        equity_graph_height
-        + metrics_table_height
-        + total_win_rates_height
-        + 50 * (num_dtes + 2)
-    )
-
-    return {
-        "total": total_height,
-        "equity": equity_graph_height,
-        "metrics": metrics_table_height,
-        "win_rates": win_rates_table_heights,
-    }
-
-
-def plot_equity_graph(dfs_dict, title):
-    # Calculate required heights
-    heights = calculate_total_subplot_heights(dfs_dict)
-    num_win_rate_tables = len(dfs_dict)
-
-    # Create subplot specs
-    specs = [
-        [{"type": "xy"}],  # Equity graph
-        [{"type": "table"}],  # Metrics table
-    ]
-
-    # Add specs for each DTE's win rate table
-    for _ in range(num_win_rate_tables):
-        specs.append([{"type": "table"}])
-
-    # Calculate row heights as proportions
-    total_height = heights["total"]
-    row_heights = [heights["equity"] / total_height, heights["metrics"] / total_height]
-    row_heights.extend([h / total_height for h in heights["win_rates"]])
-
-    vertical_spacing = 0.01  # Fixed vertical spacing instead of dynamic calculation
-
-    # Create subplot titles
-    subplot_titles = [title, "Performance Metrics by DTE"]
-    subplot_titles.extend(
-        [f"Monthly Win Rates - DTE {dte}" for dte in sorted(dfs_dict.keys())]
-    )
-
-    # Create subplots
-    fig = make_subplots(
-        rows=len(specs),
-        cols=1,
-        row_heights=row_heights,
-        vertical_spacing=vertical_spacing,
-        specs=specs,
-        subplot_titles=subplot_titles,
-    )
-
-    # Plot equity lines
+def plot_equity_graph(fig, dfs_dict):
+    # Rest of the function remains the same
     dte_groups = {
         (0, 10): "#FF4D4D",
         (11, 20): "#4D94FF",
@@ -274,20 +158,6 @@ def plot_equity_graph(dfs_dict, title):
             row=1,
             col=1,
         )
-
-    fig.update_layout(
-        showlegend=False,
-        template="plotly_white",
-        height=total_height,
-        width=1200,
-        margin=dict(r=50, t=120, b=20),  # Reduced top margin further
-        title=dict(
-            y=0.98,  # Adjusted title position
-            x=0.5,
-            xanchor="center",
-            yanchor="top",
-        ),
-    )
 
     fig.update_xaxes(title_text="Date", row=1, col=1)
     fig.update_yaxes(title_text="Cumulative Premium Kept ($)", row=1, col=1)
@@ -566,18 +436,108 @@ def generate_report(db_path, table_tag, title):
 
     monthly_win_rates_dict = calculate_monthly_win_rates_per_dte(dfs_dict)
 
+    # Setup all sub plots
+    specs = [
+        [{"type": "xy"}],  # Equity graph
+        [{"type": "table"}],  # Metrics table
+    ]
+
+    # Add specs for each DTE's win rate table and bar chart
+    num_win_rate_tables = len(dfs_dict)
+
+    for _ in range(num_win_rate_tables):
+        specs.append([{"type": "table"}])  # Win rate table
+        specs.append([{"type": "xy"}])  # Bar chart
+
+    vertical_spacing = 0.01
+
+    each_row_height = 1000
+    row_heights = [each_row_height] * len(specs)
+    total_height = each_row_height * len(specs)
+
+    # Create subplot titles
+    subplot_titles = ["Equity Graph", "Performance Metrics by DTE"]
+    for dte in sorted(dfs_dict.keys()):
+        subplot_titles.extend(
+            [f"Monthly Win Rates - DTE {dte}", f"Win/Loss Count Analysis - DTE {dte}"]
+        )
+
+    fig = make_subplots(
+        rows=len(specs),
+        cols=1,
+        row_heights=row_heights,
+        vertical_spacing=vertical_spacing,
+        specs=specs,
+        subplot_titles=subplot_titles,
+    )
+
     # Create the main equity plot first
-    fig = plot_equity_graph(dfs_dict, title)
+    fig = plot_equity_graph(fig, dfs_dict)
 
     # Add metrics table
     fig = add_metrics_to_figure(fig, metrics_dict)
 
-    # Calculate total number of win rate tables needed
-    current_row = 3  # Start from row 3 as rows 1-2 are used by equity plot and metrics
+    # Start from row 3 as rows 1-2 are used by equity plot and metrics
+    table_row = 3
     for dte in sorted(dfs_dict.keys()):
         # Add monthly win rates table
-        fig = add_win_rates_to_figure(fig, monthly_win_rates_dict[dte], current_row)
-        current_row += 1
+        fig = add_win_rates_to_figure(fig, monthly_win_rates_dict[dte], table_row)
+
+        # Bar chart goes in the next row
+        bar_row = table_row + 1
+
+        months = []
+        winning_trades = []
+        losing_trades = []
+
+        for year, monthly_data in sorted(win_loss_analysis_dict[dte].items()):
+            for month_stats in monthly_data:
+                months.append(f"{year} {month_stats['Month']}")
+                winning_trades.append(month_stats["Winning Trade Count"])
+                losing_trades.append(month_stats["Losing Trade Count"])
+
+        if months:
+            fig.add_trace(
+                go.Bar(
+                    name="Winning Trades",
+                    x=months,
+                    y=winning_trades,
+                    marker_color="#90EE90",
+                ),
+                row=bar_row,
+                col=1,
+            )
+
+            fig.add_trace(
+                go.Bar(
+                    name="Losing Trades",
+                    x=months,
+                    y=losing_trades,
+                    marker_color="#FFB6C1",
+                ),
+                row=bar_row,
+                col=1,
+            )
+
+            fig.update_xaxes(tickangle=45, row=bar_row, col=1)
+            fig.update_yaxes(title_text="Number of Trades", row=bar_row, col=1)
+
+        # Increment table_row by 2 to skip the bar chart row
+        table_row += 2
+
+    fig.update_layout(
+        height=total_height,
+        template="plotly_white",
+        showlegend=False,
+        barmode="group",
+        title_text=title,
+        title=dict(
+            x=0.5,
+            xanchor="center",
+            yanchor="top",
+        ),
+        margin=dict(r=50, t=120, b=20),
+    )
 
     fig.show()
     return fig
