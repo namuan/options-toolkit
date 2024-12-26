@@ -474,6 +474,51 @@ def calculate_monthly_win_rates_per_dte(dfs_dict):
     return monthly_win_rates_dict
 
 
+def generate_report(db_path, table_tag, title):
+    print(f"\nFetching data from database: {db_path}")
+    dte_tables = get_dte_tables(db_path, table_tag)
+
+    if not dte_tables:
+        print("No trades_dte tables found in the database.")
+        return
+
+    print(f"\nFound tables: {', '.join(dte_tables)}")
+
+    dfs_dict = {}
+    metrics_dict = {}
+
+    for table in dte_tables:
+        dte = int(table.split("_")[-1])
+        df = fetch_data(db_path, table)
+
+        if not df.empty:
+            dfs_dict[dte] = df
+            metrics_dict[dte] = calculate_portfolio_metrics(df)
+
+    if not dfs_dict:
+        print("No data found in any of the tables.")
+        return
+
+    # Calculate monthly win rates for each DTE
+    monthly_win_rates_dict = calculate_monthly_win_rates_per_dte(dfs_dict)
+
+    # Create main figure with equity graph
+    fig = plot_equity_graph(dfs_dict, title)
+
+    # Add metrics table
+    fig = add_metrics_to_figure(fig, metrics_dict)
+
+    # Add win rate tables for each DTE
+    current_row = 3  # Starting after equity graph and metrics table
+    for dte in sorted(dfs_dict.keys()):
+        fig = add_win_rates_to_figure(fig, monthly_win_rates_dict[dte], current_row)
+        current_row += 1
+
+    fig.show()
+
+    return fig
+
+
 def parse_arguments():
     parser = argparse.ArgumentParser(
         description="Generate equity graphs and calculate portfolio metrics based on trades data from an SQLite database.",
@@ -503,46 +548,7 @@ def parse_arguments():
 def main():
     args = parse_arguments()
 
-    print(f"\nFetching data from database: {args.db_path}")
-    dte_tables = get_dte_tables(args.db_path, args.table_tag)
-
-    if not dte_tables:
-        print("No trades_dte tables found in the database.")
-        return
-
-    print(f"\nFound tables: {', '.join(dte_tables)}")
-
-    dfs_dict = {}
-    metrics_dict = {}
-
-    for table in dte_tables:
-        dte = int(table.split("_")[-1])
-        df = fetch_data(args.db_path, table)
-
-        if not df.empty:
-            dfs_dict[dte] = df
-            metrics_dict[dte] = calculate_portfolio_metrics(df)
-
-    if not dfs_dict:
-        print("No data found in any of the tables.")
-        return
-
-    # Calculate monthly win rates for each DTE
-    monthly_win_rates_dict = calculate_monthly_win_rates_per_dte(dfs_dict)
-
-    # Create main figure with equity graph
-    fig = plot_equity_graph(dfs_dict, args.title)
-
-    # Add metrics table
-    fig = add_metrics_to_figure(fig, metrics_dict)
-
-    # Add win rate tables for each DTE
-    current_row = 3  # Starting after equity graph and metrics table
-    for dte in sorted(dfs_dict.keys()):
-        fig = add_win_rates_to_figure(fig, monthly_win_rates_dict[dte], current_row)
-        current_row += 1
-
-    fig.show()
+    fig = generate_report(args.db_path, args.table_tag, args.title)
 
     if args.output:
         html_content = create_html_output(fig)
