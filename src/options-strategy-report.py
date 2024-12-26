@@ -171,7 +171,7 @@ def calculate_total_subplot_heights(dfs_dict):
     win_rates_table_heights = []
     for dte in dfs_dict.keys():
         num_years = len(set(pd.to_datetime(dfs_dict[dte]["Date"]).dt.year))
-        table_height = (num_years + 1) * 70  # Increased from 50 to 70
+        table_height = (num_years + 1) * 70
         win_rates_table_heights.append(table_height)
 
     total_win_rates_height = sum(win_rates_table_heights)
@@ -181,7 +181,7 @@ def calculate_total_subplot_heights(dfs_dict):
         equity_graph_height
         + metrics_table_height
         + total_win_rates_height
-        + 50 * (num_dtes + 2)  # Reduced padding from 100 to 50
+        + 50 * (num_dtes + 2)
     )
 
     return {
@@ -362,7 +362,7 @@ def add_win_rates_to_figure(fig, win_rates_df, row_number):
                 fill_color="paleturquoise",
                 align="center",
                 font=dict(size=12),
-                height=60,  # Increased from 40 to 60
+                height=25,
             ),
             cells=dict(
                 values=[win_rates_df.index]
@@ -370,7 +370,7 @@ def add_win_rates_to_figure(fig, win_rates_df, row_number):
                 fill_color=["lavender"] + cell_colors,
                 align="center",
                 font=dict(size=11),
-                height=30,  # Increased from 40 to 60
+                height=20,
             ),
         ),
         row=row_number,
@@ -588,7 +588,6 @@ def generate_report(db_path, table_tag, title):
         rows=total_rows,
         cols=1,
         subplot_titles=subplot_titles,
-        vertical_spacing=0.05,
         specs=specs,
     )
 
