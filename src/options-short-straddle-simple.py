@@ -21,21 +21,24 @@ Usage:
 import logging
 from argparse import ArgumentParser, RawDescriptionHelpFormatter
 from typing import Optional
+
 import pandas as pd
 from pandas import DataFrame
 
 from logger import setup_logging
+from market_data import download_ticker_data
 from options_analysis import (
     ContractType,
+    DataForTradeManagement,
     GenericRunner,
     Leg,
     LegType,
     OptionsData,
+    OptionsDatabase,
     PositionType,
     Trade,
-    add_standard_cli_arguments, OptionsDatabase, DataForTradeManagement,
+    add_standard_cli_arguments,
 )
-from market_data import download_ticker_data
 
 
 def parse_args():
@@ -58,31 +61,25 @@ def parse_args():
     parser.add_argument(
         "--high-vol-check-window",
         type=int,
-        default=5,
+        default=1,
         help="Window size for high volatility check",
     )
     return parser.parse_args()
 
 
-def pull_external_data(options_db: OptionsDatabase) -> DataFrame:
-    quote_dates = options_db.get_quote_dates()
+def pull_external_data(quote_dates, window) -> DataFrame:
     symbols = ["^VIX9D", "^VIX"]
     market_data = {
-        symbol: download_ticker_data(
-            symbol, start=quote_dates[0], end=quote_dates[-1]
-        )
+        symbol: download_ticker_data(symbol, start=quote_dates[0], end=quote_dates[-1])
         for symbol in symbols
     }
-
-    window = 5
 
     df = pd.DataFrame()
     df["Short_Term_VIX"] = market_data["^VIX9D"]["Close"]
     df["Long_Term_VIX"] = market_data["^VIX"]["Close"]
     df["IVTS"] = df["Short_Term_VIX"] / df["Long_Term_VIX"]
-    df["Signal_Raw"] = (df["IVTS"] < 1).astype(int) * 2 - 1
     df[f"IVTS_Med_{window}"] = df["IVTS"].rolling(window=window).median()
-    df[f"Signal_Med_{window}"] = (df[f"IVTS_Med{window}"] < 1).astype(int) * 2 - 1
+    df["High_Vol_Signal"] = (df[f"IVTS_Med_{window}"] < 1).astype(int) * 2 - 1
     return df
 
 
@@ -90,21 +87,25 @@ class ShortStraddleStrategy(GenericRunner):
     def __init__(self, args, table_tag):
         super().__init__(args, table_tag)
         self.dte = args.dte
+        self.high_vol_check_window = args.high_vol_check_window
         self.high_vol_check_required = args.high_vol_check
+        self.external_df = None
+
+    def pre_run(self, options_db: OptionsDatabase, quote_dates):
         if self.high_vol_check_required:
-            self.external_df = pull_external_data(self.db)
-        else:
-            self.external_df = None
+            self.external_df = pull_external_data(
+                quote_dates, args.high_vol_check_window
+            )
 
     def in_high_vol_regime(self, quote_date) -> bool:
         high_vol_regime_flag = False
         try:
-            signal_raw_value = self.external_df.loc[quote_date, "Signal_Raw"]
-            if signal_raw_value == 1:
+            signal_value = self.external_df.loc[quote_date, "High_Vol_Signal"]
+            if signal_value == 1:
                 high_vol_regime_flag = False
             else:
-                logging.info(
-                    f"High Vol environment. The Signal_Raw value for {quote_date} is not 1. It is {signal_raw_value}"
+                logging.debug(
+                    f"High Vol environment. The Signal value for {quote_date} is {signal_value}"
                 )
                 high_vol_regime_flag = True
         except KeyError:
@@ -112,8 +113,12 @@ class ShortStraddleStrategy(GenericRunner):
 
         return high_vol_regime_flag
 
-    def allowed_to_create_new_trade(self, options_db, data_for_trade_management: DataForTradeManagement):
-        allowed_based_on_default_checks = super().allowed_to_create_new_trade(options_db, data_for_trade_management)
+    def allowed_to_create_new_trade(
+        self, options_db, data_for_trade_management: DataForTradeManagement
+    ):
+        allowed_based_on_default_checks = super().allowed_to_create_new_trade(
+            options_db, data_for_trade_management
+        )
         if not allowed_based_on_default_checks:
             return False
 
@@ -198,7 +203,11 @@ class ShortStraddleStrategy(GenericRunner):
 
 
 def main(args):
-    table_tag = f"short_straddle_dte_{args.dte}"
+    if args.high_vol_check:
+        table_tag = f"short_straddle_dte_{args.dte}_{args.high_vol_check_window}"
+    else:
+        table_tag = f"short_straddle_dte_{args.dte}"
+
     with ShortStraddleStrategy(args, table_tag) as runner:
         runner.run()
 

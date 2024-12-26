@@ -906,6 +906,8 @@ class GenericRunner:
         db.setup_trades_table()
         quote_dates = db.get_quote_dates(self.start_date, self.end_date)
 
+        self.pre_run(db, quote_dates)
+
         for quote_date in quote_dates:
             logging.info(f"Processing {quote_date}")
             data_for_trade_management = DataForTradeManagement(
@@ -1007,4 +1009,7 @@ class GenericRunner:
 
     @abstractmethod
     def build_trade(self, options_db, quote_date) -> Optional[Trade]:
+        pass
+
+    def pre_run(self, db, quote_dates):
         pass

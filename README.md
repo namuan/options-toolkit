@@ -74,7 +74,14 @@ View Report
 Longer Run (Single DTE)
 
 ```shell
-./src/options-short-straddle-simple.py --db-path data/spx_eod.db --dte 45 --start-date 2022-01-01 --end-date 2023-12-30 --profit-take 10 --stop-loss 75 --max-open-trades 2 -v
+./src/options-short-straddle-simple.py --db-path data/spx_eod.db --dte 45 --profit-take 10 --stop-loss 50 --max-open-trades 2 -v
+```
+
+```shell
+for hvcw in {1..2}; do
+  echo "Running for High Vol Check Window: $hvcw"
+  ./src/options-short-straddle-simple.py --db-path data/spx_eod.db --high-vol-check --high-vol-check-window $hvcw --dte 45 --profit-take 10 --stop-loss 75 --max-open-trades 2 -v
+done
 ```
 
 ```shell
