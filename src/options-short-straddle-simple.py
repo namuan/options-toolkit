@@ -49,7 +49,12 @@ def parse_args():
         default=30,
         help="Option DTE",
     )
-    # add high-vol-check as a boolean argument default to False AI!
+    parser.add_argument(
+        "--high-vol-check",
+        action="store_true",
+        default=False,
+        help="Enable high volatility check",
+    )
     return parser.parse_args()
 
 
