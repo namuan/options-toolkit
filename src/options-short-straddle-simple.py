@@ -18,6 +18,7 @@ Usage:
 
 import logging
 from argparse import ArgumentParser, RawDescriptionHelpFormatter
+from typing import Optional
 
 from logger import setup_logging
 from options_analysis import (
@@ -47,10 +48,14 @@ def parse_args():
 
 
 class ShortStraddleStrategy(GenericRunner):
-    def build_trade(self, options_db, quote_date, dte):
-        expiry_dte, dte_found = options_db.get_next_expiry_by_dte(quote_date, dte)
+    def __init__(self, args, table_tag):
+        super().__init__(args, table_tag)
+        self.dte = args.dte
+
+    def build_trade(self, options_db, quote_date) -> Optional[Trade]:
+        expiry_dte, dte_found = options_db.get_next_expiry_by_dte(quote_date, self.dte)
         if not expiry_dte:
-            logging.warning(f"⚠️ Unable to find {dte} expiry. {expiry_dte=}")
+            logging.warning(f"⚠️ Unable to find {self.dte} expiry. {expiry_dte=}")
             return None
 
         logging.debug(f"Quote date: {quote_date} -> {expiry_dte=} ({dte_found=:.1f}), ")
@@ -115,7 +120,7 @@ class ShortStraddleStrategy(GenericRunner):
         return Trade(
             trade_date=quote_date,
             expire_date=expiry_dte,
-            dte=dte,
+            dte=self.dte,
             status="OPEN",
             premium_captured=premium_captured_calculated,
             legs=trade_legs,

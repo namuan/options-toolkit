@@ -885,7 +885,6 @@ def add_standard_cli_arguments(parser):
 
 class GenericRunner:
     def __init__(self, args, table_tag):
-        self.dte = args.dte
         self.start_date = args.start_date
         self.end_date = args.end_date
         self.max_open_trades = args.max_open_trades
@@ -967,7 +966,7 @@ class GenericRunner:
             if not self.allowed_to_create_new_trade(db, data_for_trade_management):
                 continue
 
-            trade_to_setup = self.build_trade(db, quote_date, self.dte)
+            trade_to_setup = self.build_trade(db, quote_date)
             if not trade_to_setup:
                 continue
 
@@ -1007,5 +1006,5 @@ class GenericRunner:
         return True
 
     @abstractmethod
-    def build_trade(self, options_db, quote_date, dte):
+    def build_trade(self, options_db, quote_date) -> Optional[Trade]:
         pass

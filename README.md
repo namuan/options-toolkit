@@ -25,12 +25,6 @@ Check for any missing data
 
 ### Naked Short Put
 
-Quick Run (for Testing)
-
-```shell
-./src/options-short-put-simple.py --db-path data/spx_eod.db --dte 30 --start-date 2020-01-01 --end-date 2020-03-30 --max-open-trades 1 --profit-take 10 --stop-loss 75 -v
-```
-
 Trade every day
 Filter: 30 DTE, PT 10%, SL 75%, Max 5 Trades.
 
@@ -67,12 +61,6 @@ View Report
 
 ### Long Put Calendar
 
-Quick Run (for Testing)
-
-```shell
-./src/options-calendar-simple.py --db-path data/spx_eod.db --front-dte 30 --back-dte 60 --start-date 2020-01-01 --end-date 2020-03-30 --max-open-trades 1 -v
-```
-
 ```shell
 ./src/options-trade-plotter.py --db-path data/spx_eod.db --table-tag put_calendar_dte_30_60
 ```
@@ -82,12 +70,6 @@ Quick Run (for Testing)
 ```
 
 ### Short Straddle
-
-Quick Run (for Testing)
-
-```shell
-./src/options-short-straddle-simple.py --db-path data/spx_eod.db --dte 45 --start-date 2020-01-01 --end-date 2020-03-30 --max-open-trades 1 -v
-```
 
 Longer Run (Single DTE)
 
@@ -109,6 +91,23 @@ done
 ```shell
 ./src/options-strategy-report.py --db-path data/spx_eod.db --table-tag short_straddle
 ```
+
+## Testing
+
+```shell
+./src/options-short-straddle-simple.py --db-path data/spx_eod.db --dte 45 --start-date 2020-01-01 --end-date 2020-03-30 --max-open-trades 1 -v
+echo "Should see 2 trades"
+```
+
+```shell
+./src/options-calendar-simple.py --db-path data/spx_eod.db --front-dte 30 --back-dte 60 --start-date 2020-01-01 --end-date 2020-03-30 --max-open-trades 1 -v
+```
+
+```shell
+./src/options-short-put-simple.py --db-path data/spx_eod.db --dte 30 --start-date 2020-01-01 --end-date 2020-03-30 --max-open-trades 1 --profit-take 10 --stop-loss 75 -v
+echo "Should see 24 trades"
+```
+
 
 ## Drop all Trade and Trade Legs
 
