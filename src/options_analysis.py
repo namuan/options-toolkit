@@ -631,86 +631,36 @@ class OptionsDatabase:
         )
         return OptionsData(*result)
 
-    def get_options_by_delta(self, quote_date, expiry_date):
+    def get_options_by_delta(
+        self,
+        contract_type: ContractType,
+        position_type: PositionType,
+        quote_date,
+        expiry_date,
+        required_delta,
+    ):
+        # Determine the delta column based on contract type
+        delta_column = "C_DELTA" if contract_type == ContractType.CALL else "P_DELTA"
+
+        # Determine the delta sign based on position type
+        delta_sign = 1 if position_type == PositionType.LONG else -1
+
+        # Query the database for options matching the criteria, sorted by delta closest to required_delta
+        query = f"""
+            SELECT * FROM options_data
+            WHERE QUOTE_DATE = ? AND EXPIRE_DATE = ?
+            ORDER BY ABS({delta_column} * ? - ?)
+            LIMIT 1
         """
-        Get specific call and put options based on delta criteria:
-        - Call option with C_DELTA > 0.5 (closest to 0.5)
-        - Put option with P_DELTA > -0.5 (closest to -0.5)
-        Here we are selecting the first one closest to the current price
-        Returns selected columns for both options
-        """
-        call_query = """
-        SELECT
-            UNDERLYING_LAST,
-            C_LAST,
-            DTE,
-            STRIKE,
-            STRIKE_DISTANCE,
-            STRIKE_DISTANCE_PCT,
-            C_DELTA,
-            C_GAMMA,
-            C_VEGA,
-            C_THETA,
-            C_IV
-        FROM options_data
-        WHERE QUOTE_DATE = ?
-        AND EXPIRE_DATE = ?
-        ORDER BY STRIKE_DISTANCE ASC
-        LIMIT 1
-        """
+        params = (quote_date, expiry_date, delta_sign, required_delta)
+        self.cursor.execute(query, params)
+        result = self.cursor.fetchone()
 
-        put_query = """
-        SELECT
-            UNDERLYING_LAST,
-            P_LAST,
-            DTE,
-            STRIKE,
-            STRIKE_DISTANCE,
-            STRIKE_DISTANCE_PCT,
-            P_DELTA,
-            P_GAMMA,
-            P_VEGA,
-            P_THETA,
-            P_IV
-        FROM options_data
-        WHERE QUOTE_DATE = ?
-        AND EXPIRE_DATE = ?
-        ORDER BY STRIKE_DISTANCE ASC
-        LIMIT 1
-        """
+        # Convert the result into an OptionsData object or similar structure
+        if result:
+            return OptionsData(*result)
 
-        logging.debug(
-            f"Fetching options by delta criteria for {quote_date}/{expiry_date}"
-        )
-
-        logging.debug(
-            f"Call query: {call_query} with params: {quote_date=}, {expiry_date=}"
-        )
-        call_df = pd.read_sql_query(
-            call_query, self.conn, params=(quote_date, expiry_date)
-        )
-
-        logging.debug(
-            f"Put query: {put_query} with params: {quote_date=}, {expiry_date=}"
-        )
-        put_df = pd.read_sql_query(
-            put_query, self.conn, params=(quote_date, expiry_date)
-        )
-
-        # Rename columns to indicate call vs put
-        if not call_df.empty:
-            call_df = call_df.add_prefix("CALL_")
-            call_df.rename(
-                columns={"CALL_UNDERLYING_LAST": "UNDERLYING_LAST"}, inplace=True
-            )
-
-        if not put_df.empty:
-            put_df = put_df.add_prefix("PUT_")
-            put_df.rename(
-                columns={"PUT_UNDERLYING_LAST": "UNDERLYING_LAST"}, inplace=True
-            )
-
-        return call_df, put_df
+        return None
 
 
 # Options Strategy Runner Framework
@@ -729,16 +679,13 @@ class DataForTradeManagement:
 def check_profit_take_stop_loss_targets(
     profit_take, stop_loss, existing_trade, updated_legs
 ):
-    if not profit_take or not stop_loss:
-        return "", False
-
     current_premium_value = round(sum(l.premium_current for l in updated_legs), 2)
     total_premium_received = existing_trade.premium_captured
     premium_diff = total_premium_received - current_premium_value
     premium_diff_pct = (premium_diff / total_premium_received) * 100
-    if premium_diff_pct >= profit_take:
+    if profit_take and premium_diff_pct >= profit_take:
         return "PROFIT_TAKE", True
-    if premium_diff_pct <= -stop_loss:
+    if stop_loss and premium_diff_pct <= -stop_loss:
         return "STOP_LOSS", True
 
     return "UNKNOWN", False
@@ -1034,3 +981,17 @@ class GenericRunner:
 
     def pre_run(self, db, quote_dates):
         pass
+
+
+# if __name__ == '__main__':
+#     from pathlib import Path
+#     db_path = Path().cwd().parent.joinpath("data/spx_eod.db")
+#     db = OptionsDatabase(db_path.as_posix(), "foo_bar")
+#     db.connect()
+#     od = db.get_options_by_delta(
+#         ContractType.PUT,
+#         PositionType.SHORT,
+#         "2013-07-01",
+#         "2013-07-05",
+#         0.5)
+#     print(f"{od.p_last=} {od.p_delta=}")

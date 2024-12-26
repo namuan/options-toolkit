@@ -168,8 +168,6 @@ def plot_equity_graph(fig, dfs_dict):
 def add_metrics_to_figure(fig, metrics_dict):
     # Convert metrics dictionary to DataFrame with metrics as columns
     metrics_df = pd.DataFrame.from_dict(metrics_dict, orient="index")
-
-    # Rename the index to show "DTE" prefix
     metrics_df.index = [f"DTE {dte}" for dte in metrics_df.index]
 
     # Add table trace

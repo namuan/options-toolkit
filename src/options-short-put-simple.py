@@ -27,6 +27,7 @@ from options_analysis import (
     Leg,
     LegType,
     OptionsData,
+    OptionsDatabase,
     PositionType,
     Trade,
     add_standard_cli_arguments,
@@ -44,6 +45,12 @@ def parse_args():
         default=30,
         help="Option DTE",
     )
+    parser.add_argument(
+        "--short-delta",
+        type=float,
+        default=0.5,
+        help="Short delta value",
+    )
     return parser.parse_args()
 
 
@@ -51,17 +58,21 @@ class ShortPutStrategy(GenericRunner):
     def __init__(self, args, table_tag):
         super().__init__(args, table_tag)
         self.dte = args.dte
+        self.short_delta = args.short_delta
 
-    def build_trade(self, options_db, quote_date) -> Optional[Trade]:
+    def build_trade(self, options_db: OptionsDatabase, quote_date) -> Optional[Trade]:
         expiry_dte, dte_found = options_db.get_next_expiry_by_dte(quote_date, self.dte)
         if not expiry_dte:
             logging.warning(f"⚠️ Unable to find {self.dte} expiry. {expiry_dte=}")
             return None
 
         logging.debug(f"Quote date: {quote_date} -> {expiry_dte=} ({dte_found=:.1f}), ")
-
-        od: OptionsData = options_db.get_options_data_closest_to_price(
-            quote_date, expiry_dte
+        od: OptionsData = options_db.get_options_by_delta(
+            ContractType.PUT,
+            PositionType.SHORT,
+            quote_date,
+            expiry_dte,
+            self.short_delta,
         )
         if not od or od.p_last in [None, 0]:
             logging.warning(
@@ -112,7 +123,8 @@ class ShortPutStrategy(GenericRunner):
 
 
 def main(args):
-    table_tag = f"short_put_dte_{args.dte}"
+    short_delta = args.short_delta
+    table_tag = f"short_put_dte_{args.dte}_{short_delta}".replace(".", "")
     with ShortPutStrategy(args, table_tag) as runner:
         runner.run()
 
