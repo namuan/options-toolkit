@@ -74,7 +74,7 @@ View Report
 Longer Run (Single DTE)
 
 ```shell
-./src/options-short-straddle-simple.py --db-path data/spx_eod.db --dte 45 --profit-take 10 --stop-loss 50 --max-open-trades 2 -v
+./src/options-short-straddle-simple.py --db-path data/spx_eod.db --force-close-after-days 10 --dte 45 --profit-take 10 --stop-loss 75 --max-open-trades 2 -v
 ```
 
 ```shell
@@ -85,7 +85,14 @@ done
 ```
 
 ```shell
-for dte in {7..60}; do
+for fcd in {1..20}; do
+  echo "Running for Force Close after: $fcd days"
+  ./src/options-short-straddle-simple.py --db-path data/spx_eod.db --force-close-after-days $fcd --dte 45 --profit-take 10 --stop-loss 75 --max-open-trades 5 -v
+done
+```
+
+```shell
+for dte in {44..46}; do
     echo "Running for DTE: $dte"
     ./src/options-short-straddle-simple.py --db-path data/spx_eod.db --dte $dte --profit-take 10 --stop-loss 75 --max-open-trades 5 -v
 done
