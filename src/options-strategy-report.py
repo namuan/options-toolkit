@@ -566,84 +566,18 @@ def generate_report(db_path, table_tag, title):
 
     monthly_win_rates_dict = calculate_monthly_win_rates_per_dte(dfs_dict)
 
-    # Calculate total number of subplots needed (2 per DTE: monthly win rates + win/loss analysis)
-    total_rows = len(dfs_dict.keys()) * 2
-    specs = []
-    for _ in range(total_rows):
-        if _ % 2 == 0:
-            specs.append([{"type": "table"}])
-        else:
-            specs.append([{"type": "bar"}])
+    # Create the main equity plot first
+    fig = plot_equity_graph(dfs_dict, title)
 
-    subplot_titles = []
+    # Add metrics table
+    fig = add_metrics_to_figure(fig, metrics_dict)
+
+    # Calculate total number of win rate tables needed
+    current_row = 3  # Start from row 3 as rows 1-2 are used by equity plot and metrics
     for dte in sorted(dfs_dict.keys()):
-        subplot_titles.extend(
-            [
-                f"DTE {dte} - Monthly Win Rate Analysis",
-                f"DTE {dte} - Win/Loss Count Analysis",
-            ]
-        )
-
-    fig = make_subplots(
-        rows=total_rows,
-        cols=1,
-        subplot_titles=subplot_titles,
-        specs=specs,
-    )
-
-    current_row = 1
-    for dte in sorted(dfs_dict.keys()):
-        # Add monthly win rates
+        # Add monthly win rates table
         fig = add_win_rates_to_figure(fig, monthly_win_rates_dict[dte], current_row)
         current_row += 1
-
-        # Add win/loss analysis as bar plot
-        months = []
-        winning_trades = []
-        losing_trades = []
-
-        for year, monthly_data in sorted(win_loss_analysis_dict[dte].items()):
-            for month_stats in monthly_data:
-                months.append(f"{year} {month_stats['Month']}")
-                winning_trades.append(month_stats["Winning Trade Count"])
-                losing_trades.append(month_stats["Losing Trade Count"])
-
-        if months:
-            fig.add_trace(
-                go.Bar(
-                    name="Winning Trades",
-                    x=months,
-                    y=winning_trades,
-                    marker_color="#90EE90",
-                ),
-                row=current_row,
-                col=1,
-            )
-
-            fig.add_trace(
-                go.Bar(
-                    name="Losing Trades",
-                    x=months,
-                    y=losing_trades,
-                    marker_color="#FFB6C1",
-                ),
-                row=current_row,
-                col=1,
-            )
-
-            fig.update_xaxes(tickangle=45, row=current_row, col=1)
-
-            fig.update_yaxes(title_text="Number of Trades", row=current_row, col=1)
-
-            current_row += 1
-
-    fig.update_layout(
-        height=400 * total_rows,
-        showlegend=False,
-        barmode="group",
-        title_text=title if title else "Strategy Analysis",
-        margin=dict(t=30, b=10),
-    )
 
     fig.show()
     return fig
