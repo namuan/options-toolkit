@@ -833,6 +833,56 @@ def passed_trade_delay(options_db, quote_date, trade_delay):
         return False
 
 
+def add_standard_cli_arguments(parser):
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="count",
+        default=0,
+        dest="verbose",
+        help="Increase verbosity of logging output",
+    )
+    parser.add_argument(
+        "--db-path",
+        required=True,
+        help="Path to the SQLite database file",
+    )
+    parser.add_argument(
+        "--max-open-trades",
+        type=int,
+        default=99,
+        help="Maximum number of open trades allowed at a given time",
+    )
+    parser.add_argument(
+        "--trade-delay",
+        type=int,
+        default=-1,
+        help="Minimum number of days to wait between new trades",
+    )
+    parser.add_argument(
+        "-sd",
+        "--start-date",
+        type=str,
+        help="Start date for backtesting",
+    )
+    parser.add_argument(
+        "-ed",
+        "--end-date",
+        type=str,
+        help="End date for backtesting",
+    )
+    parser.add_argument(
+        "--profit-take",
+        type=float,
+        help="Close position when profit reaches this percentage of premium received",
+    )
+    parser.add_argument(
+        "--stop-loss",
+        type=float,
+        help="Close position when loss reaches this percentage of premium received",
+    )
+
+
 class GenericRunner:
     def __init__(self, args, table_tag):
         self.dte = args.dte

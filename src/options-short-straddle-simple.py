@@ -28,6 +28,7 @@ from options_analysis import (
     OptionsData,
     PositionType,
     Trade,
+    add_standard_cli_arguments,
 )
 
 
@@ -35,58 +36,12 @@ def parse_args():
     parser = ArgumentParser(
         description=__doc__, formatter_class=RawDescriptionHelpFormatter
     )
-    parser.add_argument(
-        "-v",
-        "--verbose",
-        action="count",
-        default=0,
-        dest="verbose",
-        help="Increase verbosity of logging output",
-    )
-    parser.add_argument(
-        "--db-path",
-        required=True,
-        help="Path to the SQLite database file",
-    )
+    add_standard_cli_arguments(parser)
     parser.add_argument(
         "--dte",
         type=int,
         default=30,
         help="Option DTE",
-    )
-    parser.add_argument(
-        "--max-open-trades",
-        type=int,
-        default=99,
-        help="Maximum number of open trades allowed at a given time",
-    )
-    parser.add_argument(
-        "--trade-delay",
-        type=int,
-        default=-1,
-        help="Minimum number of days to wait between new trades",
-    )
-    parser.add_argument(
-        "-sd",
-        "--start-date",
-        type=str,
-        help="Start date for backtesting",
-    )
-    parser.add_argument(
-        "-ed",
-        "--end-date",
-        type=str,
-        help="End date for backtesting",
-    )
-    parser.add_argument(
-        "--profit-take",
-        type=float,
-        help="Close position when profit reaches this percentage of premium received",
-    )
-    parser.add_argument(
-        "--stop-loss",
-        type=float,
-        help="Close position when loss reaches this percentage of premium received",
     )
     return parser.parse_args()
 
