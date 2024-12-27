@@ -873,7 +873,7 @@ class GenericRunner:
         self.pre_run(db, quote_dates)
 
         for quote_date in quote_dates:
-            logging.info(f"Processing {quote_date}")
+            logging.debug(f"Processing {quote_date}")
             data_for_trade_management = DataForTradeManagement(
                 self.max_open_trades,
                 self.trade_delay,
