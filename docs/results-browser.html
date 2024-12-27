@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>File Browser</title>
+    <!-- Include Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom styles for the iframe */
+        #file-viewer {
+            width: 100%;
+            height: 100vh;
+            border: none;
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+<div class="flex h-screen">
+    <!-- Left Column: File List -->
+    <div class="w-1/4 bg-white shadow-lg p-4 overflow-y-auto">
+        <button id="folder-select" class="w-full bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-600 transition duration-200 mb-4">
+            Select Folder
+        </button>
+        <ul id="files" class="space-y-2">
+            <!-- Files will be dynamically loaded here -->
+        </ul>
+    </div>
+
+    <!-- Right Column: File Viewer -->
+    <div class="w-3/4 bg-gray-50">
+        <iframe id="file-viewer" src=""></iframe>
+    </div>
+</div>
+
+<script>
+    const selectedFiles = []; // Array to store selected files
+
+    document.getElementById('folder-select').addEventListener('click', async () => {
+        try {
+            // Prompt the user to select a directory
+            const directoryHandle = await window.showDirectoryPicker();
+            const fileList = document.getElementById('files');
+            fileList.innerHTML = ''; // Clear previous list
+
+            // Iterate through the directory entries
+            for await (const entry of directoryHandle.values()) {
+                console.log('Found entry:', entry.name); // Debugging: Log each entry
+
+                if (entry.kind === 'file' && entry.name.toLowerCase().endsWith('.html')) {
+                    const li = document.createElement('li');
+                    li.className = 'flex items-center bg-gray-100 p-3 rounded-lg hover:bg-gray-200 transition duration-200';
+
+                    // Create a checkbox for selecting the file
+                    const checkbox = document.createElement('input');
+                    checkbox.type = 'checkbox';
+                    checkbox.className = 'mr-3';
+                    checkbox.addEventListener('change', () => {
+                        if (checkbox.checked) {
+                            selectedFiles.push(entry.name); // Add to selected files array
+                        } else {
+                            const index = selectedFiles.indexOf(entry.name);
+                            if (index !== -1) {
+                                selectedFiles.splice(index, 1); // Remove from selected files array
+                            }
+                        }
+                        console.log('Selected Files:', selectedFiles); // Debugging: Log selected files
+                    });
+
+                    // Create a span for the file name
+                    const fileName = document.createElement('span');
+                    fileName.textContent = entry.name;
+                    fileName.className = 'cursor-pointer';
+                    fileName.addEventListener('click', async () => {
+                        try {
+                            const file = await entry.getFile();
+                            const url = URL.createObjectURL(file);
+                            document.getElementById('file-viewer').src = url;
+                        } catch (error) {
+                            console.error('Error loading file:', error);
+                        }
+                    });
+
+                    // Append the checkbox and file name to the list item
+                    li.appendChild(checkbox);
+                    li.appendChild(fileName);
+
+                    // Append the list item to the file list
+                    fileList.appendChild(li);
+                }
+            }
+
+            if (fileList.children.length === 0) {
+                const li = document.createElement('li');
+                li.className = 'text-gray-500 italic';
+                li.textContent = 'No HTML files found in the selected folder.';
+                fileList.appendChild(li);
+            }
+        } catch (error) {
+            console.error('Error accessing directory:', error);
+            alert('Failed to access the folder. Please try again.');
+        }
+    });
+</script>
+</body>
+</html>
