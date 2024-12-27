@@ -1,7 +1,10 @@
 #!/usr/bin/env -S uv run --quiet --script
 # /// script
 # dependencies = [
-#   "pandas"
+#   "pandas",
+#   "yfinance",
+#   "persistent-cache@git+https://github.com/namuan/persistent-cache",
+#   "stockstats",
 # ]
 # ///
 """
@@ -20,7 +23,10 @@ import logging
 from argparse import ArgumentParser, RawDescriptionHelpFormatter
 from typing import Optional
 
+from stockstats import wrap
+
 from logger import setup_logging
+from market_data import download_ticker_data
 from options_analysis import (
     ContractType,
     GenericRunner,
@@ -51,6 +57,16 @@ def parse_args():
         default=0.5,
         help="Short delta value",
     )
+    parser.add_argument(
+        "--rsi",
+        type=int,
+        help="RSI",
+    )
+    parser.add_argument(
+        "--rsi-low-threshold",
+        type=int,
+        help="RSI Lower Threshold",
+    )
     return parser.parse_args()
 
 
@@ -59,6 +75,36 @@ class ShortPutStrategy(GenericRunner):
         super().__init__(args, table_tag)
         self.dte = args.dte
         self.short_delta = args.short_delta
+        self.rsi_check_required = args.rsi and args.rsi_low_threshold
+        self.rsi_indicator = f"rsi_{args.rsi}"
+        self.rsi_low_threshold = args.rsi_low_threshold
+        self.external_df = None
+
+    def pre_run(self, options_db, quote_dates):
+        if self.rsi_check_required:
+            self.external_df = wrap(
+                download_ticker_data("SPY", start=quote_dates[0], end=quote_dates[-1])
+            )
+            _ = self.external_df[self.rsi_indicator]
+
+    def allowed_to_create_new_trade(self, options_db, data_for_trade_management):
+        allowed_based_on_default_checks = super().allowed_to_create_new_trade(
+            options_db, data_for_trade_management
+        )
+        if not allowed_based_on_default_checks:
+            return False
+
+        if not self.rsi_check_required:
+            return True
+
+        # RSI Check
+        if data_for_trade_management.quote_date in self.external_df.index:
+            rsi_value = self.external_df.loc[
+                data_for_trade_management.quote_date, self.rsi_indicator
+            ]
+            return rsi_value <= self.rsi_low_threshold
+        else:
+            return False
 
     def build_trade(self, options_db: OptionsDatabase, quote_date) -> Optional[Trade]:
         expiry_dte, dte_found = options_db.get_next_expiry_by_dte(quote_date, self.dte)
