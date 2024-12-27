@@ -465,8 +465,6 @@ def generate_report(db_path, table_tag, title):
         ),
         margin=dict(r=50, t=120, b=20),
     )
-
-    fig.show()
     return fig
 
 
@@ -538,6 +536,8 @@ def main():
         with open(args.output, "w", encoding="utf-8") as f:
             f.write(html_content)
         print(f"\nEquity graph and metrics saved to: {args.output}")
+    else:
+        fig.show()
 
 
 if __name__ == "__main__":
