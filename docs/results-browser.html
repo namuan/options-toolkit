@@ -13,15 +13,75 @@
             height: 100vh;
             border: none;
         }
+
+        /* Custom styles for the toggle switch */
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 60px;
+            height: 34px;
+        }
+
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: 0.4s;
+            border-radius: 34px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 26px;
+            width: 26px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: 0.4s;
+            border-radius: 50%;
+        }
+
+        input:checked + .slider {
+            background-color: #3b82f6; /* Blue color */
+        }
+
+        input:checked + .slider:before {
+            transform: translateX(26px);
+        }
+
+        /* Custom style for highlighted file */
+        .highlighted {
+            background-color: #dbeafe; /* Light blue background */
+            border-left: 4px solid #3b82f6; /* Blue border */
+        }
     </style>
 </head>
 <body class="bg-gray-100">
 <div class="flex h-screen">
     <!-- Left Column: File List -->
-    <div class="w-1/4 bg-white shadow-lg p-4 overflow-y-auto">
-        <button id="folder-select" class="w-full bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-600 transition duration-200 mb-4">
-            Select Folder
-        </button>
+    <div class="w-1/4 bg-white shadow-lg p-3 overflow-y-auto">
+        <div class="flex items-center justify-between mb-4">
+            <button id="folder-select" class="w-1/2 bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-600 transition duration-200">
+                Select Folder
+            </button>
+            <div class="flex items-center space-x-2">
+                <label class="toggle-switch">
+                    <input type="checkbox" id="filter-toggle">
+                    <span class="slider"></span>
+                </label>
+            </div>
+        </div>
         <ul id="files" class="space-y-2">
             <!-- Files will be dynamically loaded here -->
         </ul>
@@ -35,6 +95,8 @@
 
 <script>
     const selectedFiles = []; // Array to store selected files
+    let showSelectedOnly = false; // Flag to toggle filter
+    let currentlyHighlighted = null; // Track the currently highlighted file
 
     document.getElementById('folder-select').addEventListener('click', async () => {
         try {
@@ -43,13 +105,22 @@
             const fileList = document.getElementById('files');
             fileList.innerHTML = ''; // Clear previous list
 
+            const entries = [];
             // Iterate through the directory entries
             for await (const entry of directoryHandle.values()) {
-                console.log('Found entry:', entry.name); // Debugging: Log each entry
+                if (entry.kind === 'file' && entry.name.toLowerCase().endsWith('.html')) {
+                    entries.push(entry);
+                }
+            }
 
+            // Sort entries alphabetically by file name
+            entries.sort((a, b) => a.name.localeCompare(b.name));
+
+            // Iterate through the directory entries
+            for await (const entry of entries) {
                 if (entry.kind === 'file' && entry.name.toLowerCase().endsWith('.html')) {
                     const li = document.createElement('li');
-                    li.className = 'flex items-center bg-gray-100 p-3 rounded-lg hover:bg-gray-200 transition duration-200';
+                    li.className = 'flex items-center bg-gray-100 p rounded-lg hover:bg-gray-200 transition duration-200';
 
                     // Create a checkbox for selecting the file
                     const checkbox = document.createElement('input');
@@ -74,8 +145,16 @@
                     fileName.addEventListener('click', async () => {
                         try {
                             const file = await entry.getFile();
-                            const url = URL.createObjectURL(file);
-                            document.getElementById('file-viewer').src = url;
+                            document.getElementById('file-viewer').src = URL.createObjectURL(file);
+
+                            // Remove highlight from the previously highlighted file
+                            if (currentlyHighlighted) {
+                                currentlyHighlighted.classList.remove('highlighted');
+                            }
+
+                            // Add highlight to the clicked file
+                            li.classList.add('highlighted');
+                            currentlyHighlighted = li;
                         } catch (error) {
                             console.error('Error loading file:', error);
                         }
@@ -99,6 +178,22 @@
         } catch (error) {
             console.error('Error accessing directory:', error);
             alert('Failed to access the folder. Please try again.');
+        }
+    });
+
+    // Toggle filter to show only selected files
+    document.getElementById('filter-toggle').addEventListener('change', () => {
+        showSelectedOnly = !showSelectedOnly;
+        const fileList = document.getElementById('files');
+        const items = fileList.getElementsByTagName('li');
+
+        for (const item of items) {
+            const checkbox = item.querySelector('input[type="checkbox"]');
+            if (showSelectedOnly) {
+                item.style.display = checkbox.checked ? 'flex' : 'none';
+            } else {
+                item.style.display = 'flex';
+            }
         }
     });
 </script>
