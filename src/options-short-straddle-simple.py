@@ -84,8 +84,8 @@ def pull_external_data(quote_dates, window) -> DataFrame:
 
 
 class ShortStraddleStrategy(GenericRunner):
-    def __init__(self, args, table_tag):
-        super().__init__(args, table_tag)
+    def __init__(self, args):
+        super().__init__(args)
         self.dte = args.dte
         self.high_vol_check_window = args.high_vol_check_window
         self.high_vol_check_required = args.high_vol_check
@@ -203,14 +203,7 @@ class ShortStraddleStrategy(GenericRunner):
 
 
 def main(args):
-    if args.high_vol_check:
-        table_tag = f"short_straddle_dte_{args.dte}_{args.high_vol_check_window}_{args.force_close_after_days}"
-    elif args.force_close_after_days:
-        table_tag = f"short_straddle_dte_{args.dte}_{args.force_close_after_days}"
-    else:
-        table_tag = f"short_straddle_dte_{args.dte}"
-
-    with ShortStraddleStrategy(args, table_tag) as runner:
+    with ShortStraddleStrategy(args) as runner:
         runner.run()
 
 

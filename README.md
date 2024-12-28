@@ -121,7 +121,7 @@ echo "Should see 3 trades"
 ```shell
 ./src/options-short-put-simple.py --db-path data/spx_eod.db --short-delta 0.5 --dte 45 --start-date 2020-01-01 --end-date 2020-03-30 --max-open-trades 1 --profit-take 10 --stop-loss 75 -v
 echo "Should see 22 trades"
-./src/options-strategy-report.py --db-path data/spx_eod.db --table-tag short_put
+./src/options-strategy-report.py --db-path data/spx_eod.db --table-tag shortput
 ```
 
 ## Drop all Trade and Trade Legs

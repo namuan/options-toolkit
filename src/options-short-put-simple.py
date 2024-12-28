@@ -71,8 +71,8 @@ def parse_args():
 
 
 class ShortPutStrategy(GenericRunner):
-    def __init__(self, args, table_tag):
-        super().__init__(args, table_tag)
+    def __init__(self, args):
+        super().__init__(args)
         self.dte = args.dte
         self.short_delta = args.short_delta
         self.rsi_check_required = args.rsi and args.rsi_low_threshold
@@ -169,9 +169,7 @@ class ShortPutStrategy(GenericRunner):
 
 
 def main(args):
-    short_delta = args.short_delta
-    table_tag = f"short_put_dte_{args.dte}_{short_delta}".replace(".", "")
-    with ShortPutStrategy(args, table_tag) as runner:
+    with ShortPutStrategy(args) as runner:
         runner.run()
 
 

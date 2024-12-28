@@ -170,8 +170,8 @@ def parse_args():
 
 
 class LongPutCalendarStrategy(GenericRunner):
-    def __init__(self, args, table_tag):
-        super().__init__(args, table_tag)
+    def __init__(self, args):
+        super().__init__(args)
         self.front_dte = args.front_dte
         self.back_dte = args.back_dte
 
@@ -262,10 +262,7 @@ class LongPutCalendarStrategy(GenericRunner):
 
 
 def main(args):
-    front_dte = args.front_dte
-    back_dte = args.back_dte
-    table_tag = f"put_calendar_dte_{front_dte}_{back_dte}"
-    with LongPutCalendarStrategy(args, table_tag) as strategy:
+    with LongPutCalendarStrategy(args) as strategy:
         strategy.run()
 
 

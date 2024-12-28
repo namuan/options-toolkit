@@ -198,13 +198,13 @@ class OptionsData:
 
 
 class OptionsDatabase:
-    def __init__(self, db_path, not_used):
+    def __init__(self, db_path, strategy_name):
         self.db_path = db_path
         self.conn = None
         self.cursor = None
         table_tag = datetime.now().strftime("%Y%m%d%H%M%S")
-        self.trades_table = f"trades_{table_tag}"
-        self.trade_legs_table = f"trade_legs_{table_tag}"
+        self.trades_table = f"trades_{strategy_name}_{table_tag}"
+        self.trade_legs_table = f"trade_legs_{strategy_name}_{table_tag}"
 
     def __enter__(self) -> "OptionsDatabase":
         """Context manager entry point - connects to database"""
@@ -881,7 +881,7 @@ def check_if_passed_days(data_for_trade_management, existing_trade):
 
 
 class GenericRunner:
-    def __init__(self, args, table_tag):
+    def __init__(self, args):
         self.args = args
         self.start_date = args.start_date
         self.end_date = args.end_date
@@ -890,8 +890,7 @@ class GenericRunner:
         self.force_close_after_days = args.force_close_after_days
         self.profit_take = args.profit_take
         self.stop_loss = args.stop_loss
-        self.table_tag = table_tag
-        self.db = OptionsDatabase(args.db_path, self.table_tag)
+        self.db = OptionsDatabase(args.db_path, self.__class__.__name__.lower())
 
     def __enter__(self):
         self.db.connect()
