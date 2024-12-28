@@ -198,11 +198,11 @@ class OptionsData:
 
 
 class OptionsDatabase:
-    def __init__(self, db_path, strategy_name):
+    def __init__(self, db_path, strategy_name, table_name_key=None):
         self.db_path = db_path
         self.conn = None
         self.cursor = None
-        self.table_tag = datetime.now().strftime("%Y%m%d%H%M%S")
+        self.table_tag = table_name_key or datetime.now().strftime("%Y%m%d%H%M%S")
         self.trades_table = f"trades_{strategy_name}_{self.table_tag}"
         self.trade_legs_table = f"trade_legs_{strategy_name}_{self.table_tag}"
 

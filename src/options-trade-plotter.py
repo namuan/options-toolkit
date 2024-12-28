@@ -205,9 +205,10 @@ class DashTradeVisualizer:
 
     FONT = "Fantasque Sans Mono"
 
-    def __init__(self, db_path: str, table_tag: str):
+    def __init__(self, db_path: str, strategy_name: str, table_name_key: str):
         self.db_path = db_path
-        self.table_tag = table_tag
+        self.strategy_name = strategy_name
+        self.table_name_key = table_name_key
         self.config = PlotConfig()
         self.app = Dash(__name__)
         self.trade_cache: Dict[int, Trade] = {}
@@ -225,7 +226,7 @@ class DashTradeVisualizer:
 
     def _get_db(self) -> OptionsDatabase:
         """Create a new database connection for the current thread"""
-        return OptionsDatabase(self.db_path, self.table_tag)
+        return OptionsDatabase(self.db_path, self.strategy_name, self.table_name_key)
 
     def setup_layout(self):
         """Setup the Dash application layout"""
@@ -539,9 +540,9 @@ class DashTradeVisualizer:
 
 def main():
     args = parse_args()
-
-    # Create visualizer with database path instead of connection
-    visualizer = DashTradeVisualizer(args.db_path, args.table_tag)
+    visualizer = DashTradeVisualizer(
+        args.db_path, args.strategy_name, args.table_name_key
+    )
     visualizer.run(debug=True)
 
 
@@ -551,10 +552,16 @@ def parse_args():
         "--db-path", required=True, help="Path to the SQLite database file"
     )
     parser.add_argument(
-        "--table-tag",
+        "--strategy-name",
         type=str,
         required=True,
-        help="Table tag to identify trades",
+        help="Name of the strategy to visualize",
+    )
+    parser.add_argument(
+        "--table-name-key",
+        type=str,
+        required=True,
+        help="Table name key to help with reporting filter",
     )
     return parser.parse_args()
 
