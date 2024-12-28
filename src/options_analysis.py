@@ -1,3 +1,4 @@
+import argparse
 import logging
 import sqlite3
 from abc import abstractmethod
@@ -197,10 +198,11 @@ class OptionsData:
 
 
 class OptionsDatabase:
-    def __init__(self, db_path, table_tag):
+    def __init__(self, db_path, not_used):
         self.db_path = db_path
         self.conn = None
         self.cursor = None
+        table_tag = datetime.now().strftime("%Y%m%d%H%M%S")
         self.trades_table = f"trades_{table_tag}"
         self.trade_legs_table = f"trade_legs_{table_tag}"
 
@@ -227,14 +229,12 @@ class OptionsDatabase:
 
     def setup_trades_table(self):
         """Drop and recreate trades and trade_history tables with DTE suffix"""
-        # Drop existing tables (trade_history first due to foreign key constraint)
         drop_tables_sql = [
             f"DROP TABLE IF EXISTS {self.trade_legs_table}",
             f"DROP TABLE IF EXISTS {self.trades_table}",
         ]
 
         for drop_sql in drop_tables_sql:
-            print("Dropping table:", drop_sql)
             self.cursor.execute(drop_sql)
 
         # Create trades table
@@ -290,6 +290,40 @@ class OptionsDatabase:
 
         logging.info("Added indexes successfully")
 
+        # Create the backtest_runs table
+        create_backtest_runs_table_sql = """
+        CREATE TABLE IF NOT EXISTS backtest_runs (
+            RunId INTEGER PRIMARY KEY,
+            DateTime TEXT NOT NULL,
+            Strategy TEXT NOT NULL,
+            RawParams TEXT,
+            TradeTableName TEXT,
+            TradeLegsTableName TEXT
+        );
+        """
+        self.cursor.execute(create_backtest_runs_table_sql)
+        self.conn.commit()
+
+    def record_backtest_run(self, strategy_name: str, test_args: argparse.Namespace):
+        backtest_run_sql = f"""
+        INSERT INTO backtest_runs (
+            DateTime, Strategy, RawParams, TradeTableName, TradeLegsTableName
+        ) VALUES (?, ?, ?, ?, ?)
+        """
+
+        raw_params = ",".join(
+            f"{key}={value}" for key, value in vars(test_args).items()
+        )
+
+        params = (
+            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            strategy_name,
+            raw_params,
+            self.trades_table,
+            self.trade_legs_table,
+        )
+
+        self.cursor.execute(backtest_run_sql, params)
         self.conn.commit()
 
     def update_trade_leg(self, existing_trade_id, updated_leg: Leg):
@@ -848,6 +882,7 @@ def check_if_passed_days(data_for_trade_management, existing_trade):
 
 class GenericRunner:
     def __init__(self, args, table_tag):
+        self.args = args
         self.start_date = args.start_date
         self.end_date = args.end_date
         self.max_open_trades = args.max_open_trades
@@ -869,6 +904,8 @@ class GenericRunner:
         db = self.db
         db.setup_trades_table()
         quote_dates = db.get_quote_dates(self.start_date, self.end_date)
+
+        self.db.record_backtest_run(self.__class__.__name__, self.args)
 
         self.pre_run(db, quote_dates)
 
