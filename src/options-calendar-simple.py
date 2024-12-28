@@ -19,7 +19,6 @@ Usage:
 
 import logging
 from argparse import ArgumentParser, RawDescriptionHelpFormatter
-from datetime import datetime
 from typing import Optional
 
 import pandas as pd
@@ -117,36 +116,6 @@ def update_open_trades(db, quote_date):
             logging.debug(
                 f"Trade {trade['TradeId']} still open as {quote_date} < {trade['ExpireDate']}"
             )
-
-
-def can_create_new_trade(db, quote_date, trade_delay_days):
-    """Check if enough time has passed since the last trade"""
-    if trade_delay_days < 0:
-        return True
-
-    last_open_trade = db.get_last_open_trade()
-
-    if last_open_trade.empty:
-        logging.debug("No open trades found. Can create new trade.")
-        return True
-
-    last_trade_date = last_open_trade["Date"].iloc[0]
-
-    last_trade_date = datetime.strptime(last_trade_date, "%Y-%m-%d").date()
-    quote_date = datetime.strptime(quote_date, "%Y-%m-%d").date()
-
-    days_since_last_trade = (quote_date - last_trade_date).days
-
-    if days_since_last_trade >= trade_delay_days:
-        logging.info(
-            f"Days since last trade: {days_since_last_trade}. Can create new trade."
-        )
-        return True
-    else:
-        logging.debug(
-            f"Only {days_since_last_trade} days since last trade. Waiting for {trade_delay_days} days."
-        )
-        return False
 
 
 def parse_args():

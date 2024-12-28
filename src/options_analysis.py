@@ -202,9 +202,9 @@ class OptionsDatabase:
         self.db_path = db_path
         self.conn = None
         self.cursor = None
-        table_tag = datetime.now().strftime("%Y%m%d%H%M%S")
-        self.trades_table = f"trades_{strategy_name}_{table_tag}"
-        self.trade_legs_table = f"trade_legs_{strategy_name}_{table_tag}"
+        self.table_tag = datetime.now().strftime("%Y%m%d%H%M%S")
+        self.trades_table = f"trades_{strategy_name}_{self.table_tag}"
+        self.trade_legs_table = f"trade_legs_{strategy_name}_{self.table_tag}"
 
     def __enter__(self) -> "OptionsDatabase":
         """Context manager entry point - connects to database"""
@@ -297,6 +297,7 @@ class OptionsDatabase:
             DateTime TEXT NOT NULL,
             Strategy TEXT NOT NULL,
             RawParams TEXT,
+            TableNameKey TEXT,
             TradeTableName TEXT,
             TradeLegsTableName TEXT
         );
@@ -307,8 +308,8 @@ class OptionsDatabase:
     def record_backtest_run(self, strategy_name: str, test_args: argparse.Namespace):
         backtest_run_sql = f"""
         INSERT INTO backtest_runs (
-            DateTime, Strategy, RawParams, TradeTableName, TradeLegsTableName
-        ) VALUES (?, ?, ?, ?, ?)
+            DateTime, Strategy, RawParams, TableNameKey, TradeTableName, TradeLegsTableName
+        ) VALUES (?, ?, ?, ?, ?, ?)
         """
 
         raw_params = ",".join(
@@ -319,6 +320,7 @@ class OptionsDatabase:
             datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             strategy_name,
             raw_params,
+            self.table_tag,
             self.trades_table,
             self.trade_legs_table,
         )
@@ -787,7 +789,7 @@ def within_max_open_trades(options_db, max_open_trades):
 
 def passed_trade_delay(options_db, quote_date, trade_delay):
     """Check if enough time has passed since the last trade"""
-    if trade_delay < 0:
+    if trade_delay is None:
         return True
 
     last_open_trade = options_db.get_last_open_trade()
@@ -838,7 +840,6 @@ def add_standard_cli_arguments(parser):
     parser.add_argument(
         "--trade-delay",
         type=int,
-        default=-1,
         help="Minimum number of days to wait between new trades",
     )
     parser.add_argument(
