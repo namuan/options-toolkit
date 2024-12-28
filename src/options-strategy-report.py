@@ -311,17 +311,20 @@ def add_win_rates_to_figure(fig, win_rates_df, row_number):
 
 
 def plot_equity_graph(fig, dfs_dict):
-    # Rest of the function remains the same
-    dte_groups = {
-        (0, 10): "#FF4D4D",
-        (11, 20): "#4D94FF",
-        (21, 30): "#47B39C",
-        (31, 40): "#9747B3",
-        (41, 50): "#FF8C1A",
-        (51, 60): "#7E57C2",
-    }
+    color_cycle = [
+        "#1f77b4",  # Blue
+        "#ff7f0e",  # Orange
+        "#2ca02c",  # Green
+        "#d62728",  # Red
+        "#9467bd",  # Purple
+        "#8c564b",  # Brown
+        "#e377c2",  # Pink
+        "#7f7f7f",  # Gray
+        "#bcbd22",  # Yellow-green
+        "#17becf",  # Cyan
+    ]
 
-    for table_name_key, df in dfs_dict.items():
+    for i, (table_name_key, df) in enumerate(dfs_dict.items()):
         df["Date"] = pd.to_datetime(df["Date"])
         df["CumulativePremiumKept"] = df["PremiumKept"].cumsum()
 
@@ -331,12 +334,13 @@ def plot_equity_graph(fig, dfs_dict):
                 y=df["CumulativePremiumKept"],
                 mode="lines+markers",
                 name=table_name_key,
-                line=dict(color="#47B39C"),
+                line=dict(color=color_cycle[i % len(color_cycle)]),
                 marker=dict(size=1),
                 hovertemplate="<b>Date:</b> %{x}<br>"
                 + "<b>Cumulative Premium:</b> $%{y:.2f}<br>"
                 + f"<b>Table Key:</b> {table_name_key}<br>"
                 + "<extra></extra>",
+                showlegend=True,
             ),
             row=1,
             col=1,
@@ -464,6 +468,7 @@ def generate_report(db_path, strategy_name, title):
                     x=months,
                     y=winning_trades,
                     marker_color="#90EE90",
+                    showlegend=False,
                 ),
                 row=bar_row,
                 col=1,
@@ -475,6 +480,7 @@ def generate_report(db_path, strategy_name, title):
                     x=months,
                     y=losing_trades,
                     marker_color="#FFB6C1",
+                    showlegend=False,
                 ),
                 row=bar_row,
                 col=1,
@@ -489,7 +495,7 @@ def generate_report(db_path, strategy_name, title):
     fig.update_layout(
         height=total_height,
         template="plotly_white",
-        showlegend=False,
+        showlegend=True,
         barmode="group",
         title_text=title,
         title=dict(
