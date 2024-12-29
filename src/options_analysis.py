@@ -954,8 +954,8 @@ class GenericRunner:
                     existing_trade.closing_premium = round(
                         -1 * sum(l.premium_current for l in updated_legs), 2
                     )
-                    existing_trade.closed_trade_at = (
-                        data_for_trade_management.quote_date
+                    existing_trade.closed_trade_at = datetime.strptime(
+                        data_for_trade_management.quote_date, "%Y-%m-%d"
                     )
                     existing_trade.close_reason = close_reason
                     db.close_trade(existing_trade_id, existing_trade)
