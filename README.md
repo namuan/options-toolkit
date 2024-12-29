@@ -50,23 +50,23 @@ done
 ```
 
 ```shell
-./src/options-trade-plotter.py --db-path data/spx_eod.db --table-tag short_put_dte_30
+STRATEGY=ShortPutStrategy;./src/options-trade-plotter.py --db-path data/spx_eod.db --strategy-name ${STRATEGY} --table-name-key `sqlite3 data/spx_eod.db "SELECT RawParams, TableNameKey from backtest_runs where Strategy = '"${STRATEGY}"'" | sed 's/verbose=1,db_path=data\/spx_eod.db,//; s/,start_date=None,end_date=None//' | fzf | awk -F\| '{print $2}'`
 ```
 
 View Report
 
 ```shell
-./src/options-strategy-report.py --db-path data/spx_eod.db --table-tag short_put
+STRATEGY=ShortPutStrategy; ./src/options-strategy-report.py --db-path data/spx_eod.db --strategy-name ${STRATEGY}
 ```
 
 ### Long Put Calendar
 
 ```shell
-./src/options-trade-plotter.py --db-path data/spx_eod.db --table-tag put_calendar_dte_30_60
+STRATEGY=LongPutCalendarStrategy;./src/options-trade-plotter.py --db-path data/spx_eod.db --strategy-name ${STRATEGY} --table-name-key `sqlite3 data/spx_eod.db "SELECT RawParams, TableNameKey from backtest_runs where Strategy = '"${STRATEGY}"'" | fzf | awk -F\| '{print $2}'`
 ```
 
 ```shell
-./src/options-strategy-report.py --db-path data/spx_eod.db --table-tag put_calendar
+STRATEGY=LongPutCalendarStrategy; ./src/options-strategy-report.py --db-path data/spx_eod.db --strategy-name ${STRATEGY}
 ```
 
 ### Short Straddle
@@ -99,11 +99,11 @@ done
 ```
 
 ```shell
-./src/options-trade-plotter.py --db-path data/spx_eod.db --table-tag short_straddle_dte_45
+STRATEGY=ShortStraddleStrategy;./src/options-trade-plotter.py --db-path data/spx_eod.db --strategy-name ${STRATEGY} --table-name-key `sqlite3 data/spx_eod.db "SELECT RawParams, TableNameKey from backtest_runs where Strategy = '"${STRATEGY}"'" | fzf | awk -F\| '{print $2}'`
 ```
 
 ```shell
-./src/options-strategy-report.py --db-path data/spx_eod.db --table-tag short_straddle
+STRATEGY=ShortStraddleStrategy; ./src/options-strategy-report.py --db-path data/spx_eod.db --strategy-name ${STRATEGY}
 ```
 
 ## Testing
@@ -121,20 +121,11 @@ echo "Should see 3 trades"
 ```shell
 ./src/options-short-put-simple.py --db-path data/spx_eod.db --short-delta 0.5 --dte 45 --start-date 2020-01-01 --end-date 2020-03-30 --max-open-trades 1 --profit-take 10 --stop-loss 75 -v
 echo "Should see 22 trades"
-./src/options-strategy-report.py --db-path data/spx_eod.db --table-tag shortput
-```
-
-## Drop all Trade and Trade Legs
-
-```shell
-sqlite3 data/spx_eod.db "SELECT 'DROP TABLE IF EXISTS ' || name || ';' FROM sqlite_master WHERE type = 'table' AND (name LIKE 'trades_%' OR name LIKE 'trade_legs_%');" | sqlite3 data/spx_eod.db
 ```
 
 ## Bulk testing across different parameters
 
 ```shell
-#!/bin/bash
-
 # Define single values for each parameter for quick testing
 rsi_values=(4)           # Only RSI 4
 rsi_low_thresholds=(20)  # Only RSI Low Threshold 20
@@ -146,20 +137,12 @@ for rsi in "${rsi_values[@]}"; do
     for rsi_low in "${rsi_low_thresholds[@]}"; do
         for dte in "${dte_values[@]}"; do
             for stop_loss in "${stop_loss_values[@]}"; do
-                # Generate the title and output filename based on the parameters
-                title="Short Put Strategy - RSI $rsi, RSI Low Threshold $rsi_low, DTE $dte, Stop Loss $stop_loss"
-                output_file="results/short-put/rsi_${rsi}_low_${rsi_low}_dte_${dte}_sl_${stop_loss}.html"
-
-                # Drop existing tables
-                sqlite3 data/spx_eod.db "SELECT 'DROP TABLE IF EXISTS ' || name || ';' FROM sqlite_master WHERE type = 'table' AND (name LIKE 'trades_%' OR name LIKE 'trade_legs_%');" | sqlite3 data/spx_eod.db
-
                 # Run the options short put script with the current parameters
                 ./src/options-short-put-simple.py --db-path data/spx_eod.db --rsi "$rsi" --rsi-low-threshold "$rsi_low" --short-delta 0.5 --dte "$dte" --stop-loss "$stop_loss" --max-open-trades 1 -v
-
-                # Generate the strategy report with the appropriate title and save it to the output file
-                ./src/options-strategy-report.py --db-path data/spx_eod.db --table-tag short_put --title "$title" --output "$output_file"
             done
         done
     done
 done
+
+STRATEGY=ShortPutStrategy; ./src/options-strategy-report.py --db-path data/spx_eod.db --strategy-name ${STRATEGY}
 ```
