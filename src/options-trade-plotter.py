@@ -211,7 +211,6 @@ class DashTradeVisualizer:
         self.table_name_key = table_name_key
         self.config = PlotConfig()
         self.app = Dash(__name__)
-        self.trade_cache: Dict[int, Trade] = {}
 
         # Initialize trades at startup using a new database connection
         self.trades = {}  # Initialize empty dict first
