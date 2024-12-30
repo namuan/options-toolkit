@@ -21,8 +21,6 @@ import logging
 from argparse import ArgumentParser, RawDescriptionHelpFormatter
 from typing import Optional
 
-import pandas as pd
-
 from logger import setup_logging
 from options_analysis import (
     ContractType,
@@ -35,87 +33,6 @@ from options_analysis import (
     Trade,
     add_standard_cli_arguments,
 )
-
-pd.set_option("display.float_format", lambda x: "%.4f" % x)
-
-
-def update_open_trades(db, quote_date):
-    """Update all open trades with current prices"""
-    open_trades = db.get_open_trades()
-
-    for _, trade in open_trades.iterrows():
-        existing_trade_id = trade["TradeId"]
-        existing_trade = db.load_trade_with_multiple_legs(
-            existing_trade_id, leg_type=LegType.TRADE_OPEN
-        )
-
-        trade_can_be_closed = False
-
-        if quote_date >= trade["ExpireDate"]:
-            trade_can_be_closed = True
-
-        updated_legs = []
-
-        for leg in existing_trade.legs:
-            od: OptionsData = db.get_current_options_data(
-                quote_date, leg.strike_price, leg.leg_expiry_date
-            )
-
-            if not od:
-                logging.warning(
-                    f"⚠️ Unable to find options data for {quote_date=}, {leg.strike_price=}, {leg.leg_expiry_date=}"
-                )
-                continue
-
-            if any(
-                price is None for price in (od.underlying_last, od.c_last, od.p_last)
-            ):
-                logging.warning(
-                    f"⚠️ Bad data found on {quote_date}. One of {od.underlying_last=}, {od.c_last=}, {od.p_last=} is missing"
-                )
-                continue
-
-            updated_leg = Leg(
-                leg_quote_date=quote_date,
-                leg_expiry_date=leg.leg_expiry_date,
-                contract_type=leg.contract_type,
-                position_type=leg.position_type,
-                strike_price=leg.strike_price,
-                underlying_price_open=leg.underlying_price_open,
-                premium_open=leg.premium_open,
-                underlying_price_current=od.underlying_last,
-                premium_current=od.p_last,
-                leg_type=LegType.TRADE_CLOSE
-                if trade_can_be_closed
-                else LegType.TRADE_AUDIT,
-                delta=od.p_delta,
-                gamma=od.p_gamma,
-                vega=od.p_vega,
-                theta=od.p_theta,
-                iv=od.p_iv,
-            )
-            updated_legs.append(updated_leg)
-            db.update_trade_leg(existing_trade_id, updated_leg)
-
-        # If trade has reached expiry date, close it
-        if trade_can_be_closed:
-            logging.debug(
-                f"Trying to close trade {trade['TradeId']} at expiry {quote_date}"
-            )
-            # Multiply by -1 because we reverse the positions (Buying back Short option and Selling Long option)
-            existing_trade.closing_premium = round(
-                -1 * sum(l.premium_current for l in updated_legs), 2
-            )
-            existing_trade.closed_trade_at = quote_date
-            existing_trade.close_reason = "EXPIRED"
-            db.close_trade(existing_trade_id, existing_trade)
-            logging.info(
-                f"Closed trade {trade['TradeId']} with {existing_trade.closing_premium} at expiry"
-            )
-        else:
-            logging.debug(
-                f"Trade {trade['TradeId']} still open as {quote_date} < {trade['ExpireDate']}"
-            )
 
 
 def parse_args():
