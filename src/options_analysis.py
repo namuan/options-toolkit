@@ -138,11 +138,13 @@ class Trade:
 
     def breakeven(self) -> Tuple[float, float]:
         breakeven_points = []
-        for leg in self.legs:
+        open_legs = [leg for leg in self.legs if leg.leg_type == LegType.TRADE_OPEN]
+        total_premium = sum(abs(leg.premium_open) for leg in open_legs)
+        for leg in open_legs:
             if leg.contract_type == ContractType.CALL:
-                breakeven_points.append(leg.strike_price + abs(leg.premium_open))
+                breakeven_points.append(leg.strike_price + total_premium)
             elif leg.contract_type == ContractType.PUT:
-                breakeven_points.append(leg.strike_price - abs(leg.premium_open))
+                breakeven_points.append(leg.strike_price - total_premium)
 
         if not breakeven_points:
             return 0.0, 0.0
