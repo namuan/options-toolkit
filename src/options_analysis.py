@@ -473,6 +473,47 @@ class OptionsDatabase:
         # Create and return trade
         return self.build_trade_from(trade_row, trade_legs)
 
+    def update_legs_with_latest_data(self, existing_trade, quote_date):
+        updated_legs = []
+        for leg in existing_trade.legs:
+            od: OptionsData = self.get_current_options_data(
+                quote_date, leg.strike_price, leg.leg_expiry_date
+            )
+
+            if bad_options_data(quote_date, od):
+                continue
+
+            updated_leg = Leg(
+                leg_quote_date=quote_date,
+                leg_expiry_date=leg.leg_expiry_date,
+                contract_type=leg.contract_type,
+                position_type=leg.position_type,
+                strike_price=leg.strike_price,
+                underlying_price_open=leg.underlying_price_open,
+                premium_open=leg.premium_open,
+                underlying_price_current=od.underlying_last,
+                premium_current=od.p_last
+                if leg.contract_type is ContractType.PUT
+                else od.c_last,
+                leg_type=LegType.TRADE_AUDIT,
+                delta=od.p_delta
+                if leg.contract_type is ContractType.PUT
+                else od.c_delta,
+                gamma=od.p_gamma
+                if leg.contract_type is ContractType.PUT
+                else od.c_gamma,
+                vega=od.p_vega if leg.contract_type is ContractType.PUT else od.c_vega,
+                theta=od.p_theta
+                if leg.contract_type is ContractType.PUT
+                else od.c_theta,
+                iv=od.p_iv if leg.contract_type is ContractType.PUT else od.c_iv,
+            )
+            logging.debug(
+                f"Updating leg {leg.position_type.value} {leg.contract_type.value} -> {updated_leg.premium_current}"
+            )
+            updated_legs.append(updated_leg)
+        return updated_legs
+
     def leg_rows_from_db(self, trade_id, leg_type=None):
         # Then get legs for this trade
         if leg_type is None:
@@ -716,42 +757,6 @@ def bad_options_data(quote_date, od: OptionsData) -> bool:
     return False
 
 
-def update_legs_with_latest_data(db, existing_trade, quote_date):
-    updated_legs = []
-    for leg in existing_trade.legs:
-        od: OptionsData = db.get_current_options_data(
-            quote_date, leg.strike_price, leg.leg_expiry_date
-        )
-
-        if bad_options_data(quote_date, od):
-            continue
-
-        updated_leg = Leg(
-            leg_quote_date=quote_date,
-            leg_expiry_date=leg.leg_expiry_date,
-            contract_type=leg.contract_type,
-            position_type=leg.position_type,
-            strike_price=leg.strike_price,
-            underlying_price_open=leg.underlying_price_open,
-            premium_open=leg.premium_open,
-            underlying_price_current=od.underlying_last,
-            premium_current=od.p_last
-            if leg.contract_type is ContractType.PUT
-            else od.c_last,
-            leg_type=LegType.TRADE_AUDIT,
-            delta=od.p_delta if leg.contract_type is ContractType.PUT else od.c_delta,
-            gamma=od.p_gamma if leg.contract_type is ContractType.PUT else od.c_gamma,
-            vega=od.p_vega if leg.contract_type is ContractType.PUT else od.c_vega,
-            theta=od.p_theta if leg.contract_type is ContractType.PUT else od.c_theta,
-            iv=od.p_iv if leg.contract_type is ContractType.PUT else od.c_iv,
-        )
-        logging.debug(
-            f"Updating leg {leg.position_type.value} {leg.contract_type.value} -> {updated_leg.premium_current}"
-        )
-        updated_legs.append(updated_leg)
-    return updated_legs
-
-
 def within_max_open_trades(options_db, max_open_trades):
     open_trades = options_db.get_open_trades()
     if len(open_trades) >= max_open_trades:
@@ -906,8 +911,8 @@ class GenericRunner:
                 )
                 logging.debug(f"Updating existing trade {existing_trade_id}")
 
-                updated_legs = update_legs_with_latest_data(
-                    db, existing_trade, data_for_trade_management.quote_date
+                updated_legs = db.update_legs_with_latest_data(
+                    existing_trade, data_for_trade_management.quote_date
                 )
 
                 close_reason, trade_can_be_closed = self.check_if_trade_can_be_closed(
