@@ -227,6 +227,39 @@ class OptionsDatabase:
             logging.info("Closing database connection")
             self.conn.close()
 
+    def build_leg_from_row(self, leg_row):
+        return Leg(
+            leg_quote_date=leg_row["Date"],
+            leg_expiry_date=leg_row["ExpiryDate"],
+            leg_type=LegType(leg_row["LegType"]),
+            contract_type=ContractType(leg_row["ContractType"]),
+            position_type=PositionType(leg_row["PositionType"]),
+            strike_price=leg_row["StrikePrice"],
+            underlying_price_open=leg_row["UnderlyingPriceOpen"],
+            premium_open=leg_row["PremiumOpen"],
+            underlying_price_current=leg_row["UnderlyingPriceCurrent"],
+            premium_current=leg_row["PremiumCurrent"],
+            delta=leg_row["Delta"],
+            gamma=leg_row["Gamma"],
+            vega=leg_row["Vega"],
+            theta=leg_row["Theta"],
+            iv=leg_row["Iv"],
+        )
+
+    def build_trade_from(self, trade_row, trade_legs):
+        return Trade(
+            id=trade_row["TradeId"],
+            trade_date=trade_row["Date"],
+            expire_date=trade_row["ExpireDate"],
+            dte=trade_row["DTE"],
+            status=trade_row["Status"],
+            premium_captured=trade_row["PremiumCaptured"],
+            closing_premium=trade_row["ClosingPremium"],
+            closed_trade_at=trade_row["ClosedTradeAt"],
+            close_reason=trade_row["CloseReason"],
+            legs=trade_legs,
+        )
+
     def setup_trades_table(self):
         """Drop and recreate trades and trade_history tables with DTE suffix"""
         drop_tables_sql = [
@@ -428,6 +461,19 @@ class OptionsDatabase:
         if not trade_row:
             raise ValueError(f"Trade with id {trade_id} not found")
 
+        leg_rows = self.leg_rows_from_db(trade_id, leg_type)
+
+        # Create legs
+        trade_legs = []
+
+        for leg_row in leg_rows:
+            leg = self.build_leg_from_row(leg_row)
+            trade_legs.append(leg)
+
+        # Create and return trade
+        return self.build_trade_from(trade_row, trade_legs)
+
+    def leg_rows_from_db(self, trade_id, leg_type=None):
         # Then get legs for this trade
         if leg_type is None:
             legs_sql = f"""
@@ -445,47 +491,39 @@ class OptionsDatabase:
             FROM {self.trade_legs_table} WHERE TradeId = ? AND LegType = ?
             """
             params = (trade_id, leg_type.value)
-
         self.cursor.execute(legs_sql, params)
         columns = [description[0] for description in self.cursor.description]
         leg_rows = [dict(zip(columns, row)) for row in self.cursor.fetchall()]
+        return leg_rows
 
-        # Create legs
-        trade_legs = []
+    def load_all_trades(self) -> List[Trade]:
+        """Load all trades from the database"""
+        # First get all trades
+        trades_sql = f"""
+        SELECT TradeId, Date, ExpireDate, DTE, Status, PremiumCaptured,
+               ClosingPremium, ClosedTradeAt, CloseReason
+        FROM {self.trades_table}
+        ORDER BY Date
+        """
+        self.cursor.execute(trades_sql)
+        columns = [description[0] for description in self.cursor.description]
+        trade_rows = [dict(zip(columns, row)) for row in self.cursor.fetchall()]
 
-        for leg_row in leg_rows:
-            leg = Leg(
-                leg_quote_date=leg_row["Date"],
-                leg_expiry_date=leg_row["ExpiryDate"],
-                leg_type=LegType(leg_row["LegType"]),
-                contract_type=ContractType(leg_row["ContractType"]),
-                position_type=PositionType(leg_row["PositionType"]),
-                strike_price=leg_row["StrikePrice"],
-                underlying_price_open=leg_row["UnderlyingPriceOpen"],
-                premium_open=leg_row["PremiumOpen"],
-                underlying_price_current=leg_row["UnderlyingPriceCurrent"],
-                premium_current=leg_row["PremiumCurrent"],
-                delta=leg_row["Delta"],
-                gamma=leg_row["Gamma"],
-                vega=leg_row["Vega"],
-                theta=leg_row["Theta"],
-                iv=leg_row["Iv"],
-            )
-            trade_legs.append(leg)
+        trades = []
+        for trade_row in trade_rows:
+            trade_id = trade_row["TradeId"]
+            leg_rows = self.leg_rows_from_db(trade_id)
+            # Create legs
+            trade_legs = []
+            for leg_row in leg_rows:
+                leg = self.build_leg_from_row(leg_row)
+                trade_legs.append(leg)
 
-        # Create and return trade
-        return Trade(
-            id=trade_row["TradeId"],
-            trade_date=trade_row["Date"],
-            expire_date=trade_row["ExpireDate"],
-            dte=trade_row["DTE"],
-            status=trade_row["Status"],
-            premium_captured=trade_row["PremiumCaptured"],
-            closing_premium=trade_row["ClosingPremium"],
-            closed_trade_at=trade_row["ClosedTradeAt"],
-            close_reason=trade_row["CloseReason"],
-            legs=trade_legs,
-        )
+            # Create trade
+            trade = self.build_trade_from(trade_row, trade_legs)
+            trades.append(trade)
+
+        return trades
 
     def close_trade(self, existing_trade_id, existing_trade: Trade):
         # Update the trade record
@@ -508,68 +546,6 @@ class OptionsDatabase:
 
         self.cursor.execute(update_trade_sql, trade_params)
         self.conn.commit()
-
-    def load_all_trades(self) -> List[Trade]:
-        """Load all trades from the database"""
-        # First get all trades
-        trades_sql = f"""
-        SELECT TradeId, Date, ExpireDate, DTE, Status, PremiumCaptured,
-               ClosingPremium, ClosedTradeAt, CloseReason
-        FROM {self.trades_table}
-        ORDER BY Date
-        """
-        self.cursor.execute(trades_sql)
-        columns = [description[0] for description in self.cursor.description]
-        trade_rows = [dict(zip(columns, row)) for row in self.cursor.fetchall()]
-
-        trades = []
-        for trade_row in trade_rows:
-            trade_id = trade_row["TradeId"]
-
-            # Get legs for this trade
-            legs_sql = f"""
-            SELECT Date, ExpiryDate, StrikePrice, ContractType, PositionType, PremiumOpen,
-                   PremiumCurrent, UnderlyingPriceOpen, UnderlyingPriceCurrent, LegType
-            FROM {self.trade_legs_table}
-            WHERE TradeId = ?
-            """
-            self.cursor.execute(legs_sql, (trade_id,))
-            leg_columns = [description[0] for description in self.cursor.description]
-            leg_rows = [dict(zip(leg_columns, row)) for row in self.cursor.fetchall()]
-
-            # Create legs
-            trade_legs = []
-            for leg_row in leg_rows:
-                leg = Leg(
-                    leg_quote_date=leg_row["Date"],
-                    leg_expiry_date=leg_row["ExpiryDate"],
-                    leg_type=LegType(leg_row["LegType"]),
-                    contract_type=ContractType(leg_row["ContractType"]),
-                    position_type=PositionType(leg_row["PositionType"]),
-                    strike_price=leg_row["StrikePrice"],
-                    underlying_price_open=leg_row["UnderlyingPriceOpen"],
-                    premium_open=leg_row["PremiumOpen"],
-                    underlying_price_current=leg_row["UnderlyingPriceCurrent"],
-                    premium_current=leg_row["PremiumCurrent"],
-                )
-                trade_legs.append(leg)
-
-            # Create trade
-            trade = Trade(
-                trade_date=trade_row["Date"],
-                expire_date=trade_row["ExpireDate"],
-                dte=trade_row["DTE"],
-                status=trade_row["Status"],
-                premium_captured=trade_row["PremiumCaptured"],
-                closing_premium=trade_row["ClosingPremium"],
-                closed_trade_at=trade_row["ClosedTradeAt"],
-                close_reason=trade_row["CloseReason"],
-                legs=trade_legs,
-            )
-            trade.id = trade_id  # Add the trade ID to the trade object
-            trades.append(trade)
-
-        return trades
 
     def get_open_trades(self):
         """Get all open trades"""
@@ -954,8 +930,8 @@ class GenericRunner:
                     existing_trade.closing_premium = round(
                         -1 * sum(l.premium_current for l in updated_legs), 2
                     )
-                    existing_trade.closed_trade_at = datetime.strptime(
-                        data_for_trade_management.quote_date, "%Y-%m-%d"
+                    existing_trade.closed_trade_at = (
+                        data_for_trade_management.quote_date
                     )
                     existing_trade.close_reason = close_reason
                     db.close_trade(existing_trade_id, existing_trade)
