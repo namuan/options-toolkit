@@ -473,9 +473,10 @@ class OptionsDatabase:
         # Create and return trade
         return self.build_trade_from(trade_row, trade_legs)
 
-    def update_legs_with_latest_data(self, existing_trade, quote_date):
+    def update_trade_legs(self, existing_trade, quote_date):
         updated_legs = []
         for leg in existing_trade.legs:
+            updates = {}
             od: OptionsData = self.get_current_options_data(
                 quote_date, leg.strike_price, leg.leg_expiry_date
             )
@@ -511,7 +512,11 @@ class OptionsDatabase:
             logging.debug(
                 f"Updating leg {leg.position_type.value} {leg.contract_type.value} -> {updated_leg.premium_current}"
             )
-            updated_legs.append(updated_leg)
+            updates["current"] = leg
+            updates["updated"] = updated_leg
+
+            updated_legs.append(updates)
+
         return updated_legs
 
     def leg_rows_from_db(self, trade_id, leg_type=None):
@@ -906,14 +911,14 @@ class GenericRunner:
 
             for _, trade in open_trades.iterrows():
                 existing_trade_id = trade["TradeId"]
+                logging.debug(f"Updating existing trade {existing_trade_id}")
                 existing_trade = db.load_trade_with_multiple_legs(
                     existing_trade_id, leg_type=LegType.TRADE_OPEN
                 )
-                logging.debug(f"Updating existing trade {existing_trade_id}")
-
-                updated_legs = db.update_legs_with_latest_data(
+                trade_legs_with_updates = db.update_trade_legs(
                     existing_trade, data_for_trade_management.quote_date
                 )
+                updated_legs = [item["updated"] for item in trade_legs_with_updates]
 
                 close_reason, trade_can_be_closed = self.check_if_trade_can_be_closed(
                     data_for_trade_management, existing_trade, updated_legs

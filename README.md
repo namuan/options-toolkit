@@ -123,6 +123,14 @@ echo "Should see 3 trades"
 echo "Should see 22 trades"
 ```
 
+```shell
+STRATEGY=ShortStraddleStrategy;./src/options-trade-plotter.py --db-path data/spx_eod.db --strategy-name ${STRATEGY} --table-name-key `sqlite3 data/spx_eod.db "SELECT RawParams, TableNameKey from backtest_runs where Strategy = '"${STRATEGY}"'" | fzf | awk -F\| '{print $2}'`
+```
+
+```shell
+STRATEGY=ShortStraddleStrategy; ./src/options-strategy-report.py --db-path data/spx_eod.db --strategy-name ${STRATEGY}
+```
+
 ## Bulk testing across different parameters
 
 ```shell
