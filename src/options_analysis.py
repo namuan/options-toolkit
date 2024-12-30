@@ -131,7 +131,7 @@ class Trade:
     status: str
     premium_captured: float
     closing_premium: Optional[float] = None
-    closed_trade_at: Optional[date] = None
+    closed_trade_at: Optional[str] = None
     close_reason: Optional[str] = None
     legs: List[Leg] = field(default_factory=list)
     id: Optional[str] = None
