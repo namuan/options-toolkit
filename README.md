@@ -109,17 +109,17 @@ STRATEGY=ShortStraddleStrategy; ./src/options-strategy-report.py --db-path data/
 ## Testing
 
 ```shell
-./src/options-short-straddle-simple.py --db-path data/spx_eod.db --dte 45 --start-date 2020-01-01 --end-date 2020-12-30 --max-open-trades 1 -v
+./src/options-short-straddle-simple.py --db-path data/spx_eod.db --dte 45 --start-date 2020-01-01 --end-date 2020-03-30 --max-open-trades 1 -v
 echo "Should see 2 trades"
 ```
 
 ```shell
-./src/options-calendar-simple.py --db-path data/spx_eod.db --front-dte 30 --back-dte 60 --start-date 2020-01-01 --end-date 2020-12-30 --max-open-trades 1 -v
+./src/options-calendar-simple.py --db-path data/spx_eod.db --front-dte 30 --back-dte 60 --start-date 2020-01-01 --end-date 2020-03-30 --max-open-trades 1 -v
 echo "Should see 3 trades"
 ```
 
 ```shell
-./src/options-short-put-simple.py --db-path data/spx_eod.db --short-delta 0.5 --dte 45 --start-date 2020-01-01 --end-date 2020-12-30 --max-open-trades 1 --profit-take 10 --stop-loss 75 -v
+./src/options-short-put-simple.py --db-path data/spx_eod.db --short-delta 0.5 --dte 45 --start-date 2020-01-01 --end-date 2020-03-30 --max-open-trades 1 --profit-take 10 --stop-loss 75 -v
 echo "Should see 22 trades"
 ```
 
