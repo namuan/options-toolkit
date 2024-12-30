@@ -146,3 +146,10 @@ done
 
 STRATEGY=ShortPutStrategy; ./src/options-strategy-report.py --db-path data/spx_eod.db --strategy-name ${STRATEGY}
 ```
+
+## Drop all transaction tables
+
+```shell
+sqlite3 data/spx_eod.db "DROP TABLE backtest_runs";
+sqlite3 data/spx_eod.db "SELECT 'DROP TABLE IF EXISTS ' || name || ';' FROM sqlite_master WHERE type = 'table' AND (name LIKE 'trades_%' OR name LIKE 'trade_legs_%');" | sqlite3 data/spx_eod.db
+```
