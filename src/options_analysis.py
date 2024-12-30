@@ -5,7 +5,7 @@ from abc import abstractmethod
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from enum import Enum
-from typing import List, Optional
+from typing import Dict, List, Optional, Tuple
 
 import pandas as pd
 
@@ -135,6 +135,19 @@ class Trade:
     close_reason: Optional[str] = None
     legs: List[Leg] = field(default_factory=list)
     id: Optional[str] = None
+
+    def breakeven(self) -> Tuple[float, float]:
+        breakeven_points = []
+        for leg in self.legs:
+            if leg.contract_type == ContractType.CALL:
+                breakeven_points.append(leg.strike_price + abs(leg.premium_open))
+            elif leg.contract_type == ContractType.PUT:
+                breakeven_points.append(leg.strike_price - abs(leg.premium_open))
+
+        if not breakeven_points:
+            return 0.0, 0.0
+
+        return min(breakeven_points), max(breakeven_points)
 
     def __str__(self):
         trade_str = (
@@ -473,7 +486,7 @@ class OptionsDatabase:
         # Create and return trade
         return self.build_trade_from(trade_row, trade_legs)
 
-    def update_trade_legs(self, existing_trade, quote_date):
+    def update_trade_legs(self, existing_trade, quote_date) -> List[Dict[str, Leg]]:
         updated_legs = []
         for leg in existing_trade.legs:
             updates = {}
@@ -896,7 +909,7 @@ class GenericRunner:
         self.pre_run(db, quote_dates)
 
         for quote_date in quote_dates:
-            logging.debug(f"Processing {quote_date}")
+            logging.info(f"Processing {quote_date}")
             data_for_trade_management = DataForTradeManagement(
                 self.max_open_trades,
                 self.trade_delay,
@@ -911,7 +924,9 @@ class GenericRunner:
 
             for _, trade in open_trades.iterrows():
                 existing_trade_id = trade["TradeId"]
-                logging.debug(f"Updating existing trade {existing_trade_id}")
+                logging.info(
+                    f"{data_for_trade_management.quote_date} => Updating existing trade {existing_trade_id}"
+                )
                 existing_trade = db.load_trade_with_multiple_legs(
                     existing_trade_id, leg_type=LegType.TRADE_OPEN
                 )
