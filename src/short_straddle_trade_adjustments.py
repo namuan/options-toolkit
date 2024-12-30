@@ -19,30 +19,12 @@ Usage:
 ./short_straddle_trade_adjustments.py --db-path /path/to/database.db --strategy-name "StrategyA" --table-name-key "TableKey" --trade-id 123 -vv # To log DEBUG messages
 """
 
-import logging
 from argparse import ArgumentParser, RawDescriptionHelpFormatter
 from dataclasses import dataclass
 from datetime import date
 
 from options_analysis import ContractType, OptionsDatabase, PositionType
-
-
-def setup_logging(verbosity):
-    logging_level = logging.WARNING
-    if verbosity == 1:
-        logging_level = logging.INFO
-    elif verbosity >= 2:
-        logging_level = logging.DEBUG
-
-    logging.basicConfig(
-        handlers=[
-            logging.StreamHandler(),
-        ],
-        format="%(asctime)s - %(filename)s:%(lineno)d - %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-        level=logging_level,
-    )
-    logging.captureWarnings(capture=True)
+from src.logger import setup_logging
 
 
 def parse_args():
