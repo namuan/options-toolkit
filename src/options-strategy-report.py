@@ -406,7 +406,10 @@ def generate_report(db_path, strategy_name, title):
     total_height = each_row_height * total_rows
 
     # Create subplot titles
-    subplot_titles = ["Equity Graph", "Performance Metrics by DTE"]
+    subplot_titles = [
+        f"<span style='font-size:10px'>Equity Graph</span>",
+        f"<span style='font-size:10px'>Performance Metrics by DTE</span>",
+    ]
     for table_name_key in sorted(dfs_dict.keys()):
         backtest_run_row = next(
             (row for row in backtest_runs if row.table_name_key == table_name_key), None
@@ -423,8 +426,8 @@ def generate_report(db_path, strategy_name, title):
         # Populate Sub titles
         subplot_titles.extend(
             [
-                f"Monthly Win Rates - ({params})",
-                f"Win/Loss Count Analysis - ({params})",
+                f"<span style='font-size:10px'>Monthly Win Rates - ({params})</span>",
+                f"<span style='font-size:10px'>Win/Loss Count Analysis - ({params})</span>",
             ]
         )
 

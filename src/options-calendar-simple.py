@@ -4,19 +4,6 @@
 #   "pandas"
 # ]
 # ///
-"""
-Options Straddle Analysis Script
-
-Usage:
-./options-straddle-simple.py -h
-
-./options-straddle-simple.py -v # To log INFO messages
-./options-straddle-simple.py -vv # To log DEBUG messages
-./options-straddle-simple.py --db-path path/to/database.db # Specify database path
-./options-straddle-simple.py --dte 30 # Find next expiration with DTE > 30 for each quote date
-./options-straddle-simple.py --trade-delay 7 # Wait 7 days between new trades
-"""
-
 import logging
 from argparse import ArgumentParser, RawDescriptionHelpFormatter
 from typing import Optional

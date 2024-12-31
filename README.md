@@ -59,6 +59,20 @@ View Report
 STRATEGY=ShortPutStrategy; ./src/options-strategy-report.py --db-path data/spx_eod.db --strategy-name ${STRATEGY}
 ```
 
+### RSI Filter Short Put/Call
+
+```shell
+./src/options-short-put-call-simple.py --db-path data/spx_eod.db --short-put-delta 0.2 --short-call-delta -0.15 --dte 45 --max-open-trades 5 --rsi 4 --rsi-low-threshold 15 --rsi-high-threshold 80 --force-close-after-days 20 --profit-take 50 --stop-loss 75 -vv
+```
+
+```shell
+STRATEGY=ShortPutCallStrategy;./src/options-trade-plotter.py --db-path data/spx_eod.db --strategy-name ${STRATEGY} --table-name-key `sqlite3 data/spx_eod.db "SELECT RawParams, TableNameKey from backtest_runs where Strategy = '"${STRATEGY}"'" | fzf | awk -F\| '{print $2}'`
+```
+
+```shell
+STRATEGY=ShortPutCallStrategy; ./src/options-strategy-report.py --db-path data/spx_eod.db --strategy-name ${STRATEGY}
+```
+
 ### Long Put Calendar
 
 ```shell

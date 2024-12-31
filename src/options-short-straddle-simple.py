@@ -6,18 +6,6 @@
 #   "persistent-cache@git+https://github.com/namuan/persistent-cache",
 # ]
 # ///
-"""
-Options Straddle Analysis Script
-
-Usage:
-./options-short-straddle-simple.py -h
-./options-short-straddle-simple.py -v # To log INFO messages
-./options-short-straddle-simple.py -vv # To log DEBUG messages
-./options-short-straddle-simple.py --db-path path/to/database.db # Specify database path
-./options-short-straddle-simple.py --dte 30 # Find next expiration with DTE > 30 for each quote date
-./options-short-straddle-simple.py --trade-delay 7 # Wait 7 days between new trades
-"""
-
 import logging
 from argparse import ArgumentParser, RawDescriptionHelpFormatter
 from typing import Optional

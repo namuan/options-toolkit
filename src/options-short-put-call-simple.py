@@ -56,14 +56,21 @@ def parse_args():
     parser.add_argument(
         "--rsi",
         type=int,
+        default=14,
         help="RSI",
     )
     parser.add_argument(
         "--rsi-low-threshold",
         type=int,
+        default=20,
         help="RSI Lower Threshold",
     )
-    # TODO: Add argument for rsi_high_threshold
+    parser.add_argument(
+        "--rsi-high-threshold",
+        type=int,
+        default=80,
+        help="RSI Higher Threshold",
+    )
     return parser.parse_args()
 
 
@@ -73,28 +80,35 @@ class ShortPutCallStrategy(GenericRunner):
         self.dte = args.dte
         self.short_put_delta = args.short_put_delta
         self.short_call_delta = args.short_call_delta
-        self.rsi_check_required = args.rsi and args.rsi_low_threshold
         self.rsi_indicator = f"rsi_{args.rsi}"
         self.rsi_low_threshold = args.rsi_low_threshold
         self.rsi_high_threshold = args.rsi_high_threshold
         self.external_df = None
 
     def pre_run(self, options_db, quote_dates):
-        if self.rsi_check_required:
-            self.external_df = wrap(
-                download_ticker_data("SPY", start=quote_dates[0], end=quote_dates[-1])
-            )
-            _ = self.external_df[self.rsi_indicator]
+        self.external_df = wrap(
+            download_ticker_data("SPY", start=quote_dates[0], end=quote_dates[-1])
+        )
+        _ = self.external_df[self.rsi_indicator]
 
     def allowed_to_create_new_trade(self, options_db, data_for_trade_management):
         allowed_based_on_default_checks = super().allowed_to_create_new_trade(
             options_db, data_for_trade_management
         )
-        # TODO: Simplify this function
         if not allowed_based_on_default_checks:
             return False
 
-        return True
+        self.current_rsi_value = self.rsi_value_for(
+            data_for_trade_management.quote_date
+        )
+        if self.current_rsi_value is None:
+            return False
+
+        # Only trade if RSI is oversold or overbought
+        return (
+            self.current_rsi_value < self.rsi_low_threshold
+            or self.current_rsi_value > self.rsi_high_threshold
+        )
 
     def build_trade(self, options_db: OptionsDatabase, quote_date) -> Optional[Trade]:
         expiry_dte, dte_found = options_db.get_next_expiry_by_dte(quote_date, self.dte)
@@ -117,54 +131,71 @@ class ShortPutCallStrategy(GenericRunner):
             expiry_dte,
             self.short_call_delta,
         )
+
         if (
-            not put_option
-            or put_option.p_last in [None, 0]
-            or not call_option
-            or call_option.p_last in [None, 0]
+            put_option.p_last is None
+            or put_option.p_last == 0
+            or call_option.c_last is None
+            or call_option.c_last == 0
         ):
             logging.warning(
-                "⚠️ Bad data found: "
-                + (
-                    "One or more options are not valid"
-                    if not put_option
-                    else f"On {quote_date=} Either {put_option.p_last=} or {call_option.c_last} is not valid"
-                )
+                f"⚠️ Bad data found: On {quote_date=} Either {put_option.p_last=} or {call_option.c_last=} is not valid"
             )
             return None
 
         logging.debug(
-            f"Contract ({expiry_dte=}): { put_option.underlying_last=:.2f}, { put_option.strike=:.2f}, { put_option.c_last=:.2f}, { put_option.p_last=:.2f}"
+            f"Contract ({expiry_dte=}): "
+            f"{ put_option.underlying_last=:.2f}, { put_option.strike=:.2f}, { put_option.p_last=:.2f}"
+            f"{ call_option.underlying_last=:.2f}, { call_option.strike=:.2f}, { call_option.c_last=:.2f}"
         )
 
-        # TODO: Determine what trade to do based on RSI
-        # current_rsi_value = self.rsi_value_for(quote_date)
-        # trade_decision is either short_put, short_call or none
-        # if current_rsi_value is None then no trade
-        # If current_rsi_value < low_threshold then Short Put
-        # If current_rsi_value > high_threshold then Short Call
-
-        trade_legs = [
-            Leg(
-                leg_quote_date=quote_date,
-                leg_expiry_date=expiry_dte,
-                leg_type=LegType.TRADE_OPEN,
-                position_type=PositionType.SHORT,
-                contract_type=ContractType.PUT,
-                strike_price=put_option.strike,
-                underlying_price_open=put_option.underlying_last,
-                premium_open=put_option.p_last,
-                premium_current=0,
-                delta=put_option.p_delta,
-                gamma=put_option.p_gamma,
-                vega=put_option.p_vega,
-                theta=put_option.p_theta,
-                iv=put_option.p_iv,
-            ),
-        ]
+        if self.current_rsi_value < self.rsi_low_threshold:
+            trade_legs = [
+                Leg(
+                    leg_quote_date=quote_date,
+                    leg_expiry_date=expiry_dte,
+                    leg_type=LegType.TRADE_OPEN,
+                    position_type=PositionType.SHORT,
+                    contract_type=ContractType.PUT,
+                    strike_price=put_option.strike,
+                    underlying_price_open=put_option.underlying_last,
+                    premium_open=put_option.p_last,
+                    premium_current=0,
+                    delta=put_option.p_delta,
+                    gamma=put_option.p_gamma,
+                    vega=put_option.p_vega,
+                    theta=put_option.p_theta,
+                    iv=put_option.p_iv,
+                ),
+            ]
+        elif self.current_rsi_value > self.rsi_high_threshold:
+            trade_legs = [
+                Leg(
+                    leg_quote_date=quote_date,
+                    leg_expiry_date=expiry_dte,
+                    leg_type=LegType.TRADE_OPEN,
+                    position_type=PositionType.SHORT,
+                    contract_type=ContractType.CALL,
+                    strike_price=call_option.strike,
+                    underlying_price_open=call_option.underlying_last,
+                    premium_open=call_option.c_last,
+                    premium_current=0,
+                    delta=call_option.c_delta,
+                    gamma=call_option.c_gamma,
+                    vega=call_option.c_vega,
+                    theta=call_option.c_theta,
+                    iv=call_option.c_iv,
+                ),
+            ]
+        else:
+            return None
 
         premium_captured_calculated = round(
             sum(leg.premium_open for leg in trade_legs), 2
+        )
+
+        logging.info(
+            f"RSI is {self.current_rsi_value:.2f}. Created Short {trade_legs[0].contract_type} trade for {premium_captured_calculated=}"
         )
 
         return Trade(

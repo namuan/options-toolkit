@@ -218,6 +218,7 @@ class OptionsDatabase:
         self.conn = None
         self.cursor = None
         self.table_tag = table_name_key or datetime.now().strftime("%Y%m%d%H%M%S")
+        logging.info(f"Strategy Key {self.table_tag}")
         self.trades_table = f"trades_{strategy_name}_{self.table_tag}"
         self.trade_legs_table = f"trade_legs_{strategy_name}_{self.table_tag}"
 
@@ -726,6 +727,7 @@ class OptionsDatabase:
             LIMIT 1
         """
         params = (quote_date, expiry_date, delta_sign, required_delta)
+        logging.debug(f"Executing query:\n{query} -> {params}")
         self.cursor.execute(query, params)
         result = self.cursor.fetchone()
 

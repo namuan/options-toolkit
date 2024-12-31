@@ -7,18 +7,6 @@
 #   "stockstats",
 # ]
 # ///
-"""
-Options Straddle Analysis Script
-
-Usage:
-./options-short-put-simple.py -h
-./options-short-put-simple.py -v # To log INFO messages
-./options-short-put-simple.py -vv # To log DEBUG messages
-./options-short-put-simple.py --db-path path/to/database.db # Specify database path
-./options-short-put-simple.py --dte 30 # Find next expiration with DTE > 30 for each quote date
-./options-short-put-simple.py --trade-delay 7 # Wait 7 days between new trades
-"""
-
 import logging
 from argparse import ArgumentParser, RawDescriptionHelpFormatter
 from typing import Optional
