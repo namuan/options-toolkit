@@ -2,6 +2,33 @@
 
 ![Intro](assets/trade-plotter.png)
 
+## Parameters
+
+Generic parameters
+
+```text
+  --db-path DB_PATH     Path to the SQLite database file
+  --max-open-trades MAX_OPEN_TRADES
+                        Maximum number of open trades allowed at a given time
+  --trade-delay TRADE_DELAY
+                        Minimum number of days to wait between new trades
+  --force-close-after-days FORCE_CLOSE_AFTER_DAYS
+                        Force close trade after days
+  -sd START_DATE, --start-date START_DATE
+                        Start date for backtesting
+  -ed END_DATE, --end-date END_DATE
+                        End date for backtesting
+  --profit-take PROFIT_TAKE
+                        Close position when profit reaches this percentage of premium received
+  --stop-loss STOP_LOSS
+                        Close position when loss reaches this percentage of premium received
+  --high-vol-check      Enable high volatility check
+  --high-vol-check-window HIGH_VOL_CHECK_WINDOW
+                        Window size for high volatility check
+```
+
+Each strategy may have its own set of parameter.
+
 ## Reports
 
 * [short-put-1-max-close-expiry.html](https://namuan.github.io/options-toolkit/short-put/short-put-1-max-close-expiry.html)
