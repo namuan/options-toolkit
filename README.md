@@ -103,6 +103,10 @@ STRATEGY=ShortPutCallStrategy; ./src/options-strategy-report.py --db-path data/s
 ### Long Put Calendar
 
 ```shell
+./src/options-calendar-simple.py --db-path data/spx_eod.db --front-dte 20 --back-dte 50 --max-open-trades 1 -v
+```
+
+```shell
 STRATEGY=LongPutCalendarStrategy;./src/options-trade-plotter.py --db-path data/spx_eod.db --strategy-name ${STRATEGY} --table-name-key `sqlite3 data/spx_eod.db "SELECT RawParams, TableNameKey from backtest_runs where Strategy = '"${STRATEGY}"'" | fzf | awk -F\| '{print $2}'`
 ```
 
@@ -206,3 +210,4 @@ STRATEGY=ShortPutStrategy; ./src/options-strategy-report.py --db-path data/spx_e
 sqlite3 data/spx_eod.db "DROP TABLE backtest_runs";
 sqlite3 data/spx_eod.db "SELECT 'DROP TABLE IF EXISTS ' || name || ';' FROM sqlite_master WHERE type = 'table' AND (name LIKE 'trades_%' OR name LIKE 'trade_legs_%');" | sqlite3 data/spx_eod.db
 ```
+

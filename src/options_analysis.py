@@ -497,7 +497,9 @@ class OptionsDatabase:
                 quote_date, leg.strike_price, leg.leg_expiry_date
             )
 
-            if bad_options_data(quote_date, od):
+            error_message, bad_data_found = bad_options_data(quote_date, od)
+            if bad_data_found:
+                logging.warning(error_message)
                 continue
 
             updated_leg = Leg(
@@ -755,7 +757,11 @@ def check_profit_take_stop_loss_targets(
     profit_take, stop_loss, existing_trade, updated_legs
 ):
     current_premium_value = round(sum(l.premium_current for l in updated_legs), 2)
-    total_premium_received = existing_trade.premium_captured
+    total_premium_received = (
+        existing_trade.premium_captured + 0.001
+        if existing_trade.premium_captured == 0
+        else existing_trade.premium_captured
+    )  # to avoid divide by zero error
     premium_diff = total_premium_received - current_premium_value
     premium_diff_pct = (premium_diff / total_premium_received) * 100
     if profit_take and premium_diff_pct >= profit_take:
@@ -766,17 +772,19 @@ def check_profit_take_stop_loss_targets(
     return "UNKNOWN", False
 
 
-def bad_options_data(quote_date, od: OptionsData) -> bool:
+def bad_options_data(quote_date, od: OptionsData) -> Tuple[str, bool]:
     if not od:
-        logging.warning(f"⚠️ Unable to find options data for {quote_date=}")
-        return True
+        return f"⚠️ Unable to find options data for {quote_date=}", True
 
-    if any(price is None for price in (od.underlying_last, od.c_last, od.p_last)):
-        logging.warning(
-            f"⚠️ Bad data found on {quote_date}. One of {od.underlying_last=}, {od.c_last=}, {od.p_last=} is missing"
+    if any(
+        price is None or price == 0
+        for price in (od.underlying_last, od.c_last, od.p_last)
+    ):
+        return (
+            f"⚠️ Bad data found on {quote_date}. One of {od.underlying_last=}, {od.c_last=}, {od.p_last=} is missing",
+            True,
         )
-        return True
-    return False
+    return "", False
 
 
 def within_max_open_trades(options_db, max_open_trades):
@@ -927,50 +935,58 @@ class GenericRunner:
             open_trades = db.get_open_trades()
 
             for _, trade in open_trades.iterrows():
-                existing_trade_id = trade["TradeId"]
-                logging.info(
-                    f"{data_for_trade_management.quote_date} => Updating existing trade {existing_trade_id}"
-                )
-                existing_trade = db.load_trade_with_multiple_legs(
-                    existing_trade_id, leg_type=LegType.TRADE_OPEN
-                )
-                trade_legs_with_updates = db.update_trade_legs(
-                    existing_trade, data_for_trade_management.quote_date
-                )
-                updated_legs = [item["updated"] for item in trade_legs_with_updates]
-
-                close_reason, trade_can_be_closed = self.check_if_trade_can_be_closed(
-                    data_for_trade_management, existing_trade, updated_legs
-                )
-
-                for leg in updated_legs:
-                    leg.leg_type = (
-                        LegType.TRADE_CLOSE
-                        if trade_can_be_closed
-                        else LegType.TRADE_AUDIT
-                    )
-                    db.update_trade_leg(existing_trade_id, leg)
-
-                if trade_can_be_closed:
-                    logging.debug(
-                        f"Trying to close trade {trade['TradeId']} at expiry {data_for_trade_management.quote_date}"
-                    )
-                    # Multiply by -1 because we reverse the positions (Buying back Short option and Selling Long option)
-                    existing_trade.closing_premium = round(
-                        -1 * sum(l.premium_current for l in updated_legs), 2
-                    )
-                    existing_trade.closed_trade_at = (
-                        data_for_trade_management.quote_date
-                    )
-                    existing_trade.close_reason = close_reason
-                    db.close_trade(existing_trade_id, existing_trade)
+                try:
+                    existing_trade_id = trade["TradeId"]
                     logging.info(
-                        f"Closed trade {trade['TradeId']} with {existing_trade.closing_premium} at expiry"
+                        f"{data_for_trade_management.quote_date} => Updating existing trade {existing_trade_id}"
                     )
-                else:
-                    logging.debug(
-                        f"Trade {trade['TradeId']} still open as {data_for_trade_management.quote_date} < {trade['ExpireDate']}"
+                    existing_trade = db.load_trade_with_multiple_legs(
+                        existing_trade_id, leg_type=LegType.TRADE_OPEN
                     )
+                    trade_legs_with_updates = db.update_trade_legs(
+                        existing_trade, data_for_trade_management.quote_date
+                    )
+                    updated_legs = [item["updated"] for item in trade_legs_with_updates]
+
+                    close_reason, trade_can_be_closed = (
+                        self.check_if_trade_can_be_closed(
+                            data_for_trade_management, existing_trade, updated_legs
+                        )
+                    )
+
+                    for leg in updated_legs:
+                        leg.leg_type = (
+                            LegType.TRADE_CLOSE
+                            if trade_can_be_closed
+                            else LegType.TRADE_AUDIT
+                        )
+                        db.update_trade_leg(existing_trade_id, leg)
+
+                    if trade_can_be_closed:
+                        logging.debug(
+                            f"Trying to close trade {trade['TradeId']} at expiry {data_for_trade_management.quote_date}"
+                        )
+                        # Multiply by -1 because we reverse the positions (Buying back Short option and Selling Long option)
+                        existing_trade.closing_premium = round(
+                            -1 * sum(l.premium_current for l in updated_legs), 2
+                        )
+                        existing_trade.closed_trade_at = (
+                            data_for_trade_management.quote_date
+                        )
+                        existing_trade.close_reason = close_reason
+                        db.close_trade(existing_trade_id, existing_trade)
+                        logging.info(
+                            f"Closed trade {trade['TradeId']} with {existing_trade.closing_premium} at expiry"
+                        )
+                    else:
+                        logging.debug(
+                            f"Trade {trade['TradeId']} still open as {data_for_trade_management.quote_date} < {trade['ExpireDate']}"
+                        )
+                except Exception as e:
+                    logging.error(
+                        f"Failed to process open trade {trade['TradeId']} -> {e}"
+                    )
+                    raise e
 
             if not self.allowed_to_create_new_trade(db, data_for_trade_management):
                 continue

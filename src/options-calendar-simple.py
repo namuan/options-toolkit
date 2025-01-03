@@ -81,9 +81,9 @@ class LongPutCalendarStrategy(GenericRunner):
             )
             return None
 
-        if front_od.p_last is None or back_od.p_last is None:
+        if front_od.p_last in [None, 0] or back_od.p_last in [None, 0]:
             logging.warning(
-                f"⚠️ Bad data found on {quote_date}. One of {front_od.p_last=}, {back_od.p_last=} is not valid."
+                f"⚠️ Bad data found on {quote_date} when creating a new trade. One of {front_od.p_last=}, {back_od.p_last=} is not valid."
             )
             return None
 
