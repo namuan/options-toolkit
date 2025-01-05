@@ -229,26 +229,52 @@ def calculate_monthly_win_rates_per_dte(dfs_dict):
     return monthly_win_rates_dict
 
 
-def add_metrics_to_figure(fig, metrics_dict):
+def add_metrics_to_figure(fig, metrics_dict, backtest_runs):
     metrics_df = pd.DataFrame.from_dict(metrics_dict, orient="index")
     metrics_df.index = [dte for dte in metrics_df.index]
+
+    # Create parameters column
+    params_list = []
+    for idx in metrics_df.index:
+        print(metrics_df.loc[idx])
+        backtest_run_row = next(
+            (row for row in backtest_runs if row.table_name_key == idx), None
+        )
+        if backtest_run_row:
+            raw_params_dict = {
+                k: v
+                for k, v in (
+                    x.split("=") for x in backtest_run_row.raw_params.split(",")
+                )
+                if k not in ("verbose", "db_path", "start_date", "end_date")
+                and v != "None"
+            }
+            params = "<br>".join(f"{k}={v}" for k, v in raw_params_dict.items())
+            params_list.append(params)
+        else:
+            params_list.append("")
+
+    header_values = ["Table Key", "Parameters"] + list(metrics_df.columns)
+    cell_values = [metrics_df.index, params_list] + [
+        metrics_df[col] for col in metrics_df.columns
+    ]
 
     # Add table trace
     fig.add_trace(
         go.Table(
             header=dict(
-                values=["Table Key"] + list(metrics_df.columns),
+                values=header_values,
                 fill_color="paleturquoise",
                 align="left",
-                font=dict(size=12),
+                font=dict(size=10),
             ),
             cells=dict(
-                values=[metrics_df.index]
-                + [metrics_df[col] for col in metrics_df.columns],
+                values=cell_values,
                 fill_color="lavender",
                 align="left",
-                font=dict(size=11),
+                font=dict(size=8),
             ),
+            columnwidth=[1, 2] + [1] * len(metrics_df.columns),
         ),
         row=2,
         col=1,
@@ -443,7 +469,7 @@ def generate_report(db_path, strategy_name, title):
     fig = plot_equity_graph(fig, dfs_dict)
 
     # Add metrics table
-    fig = add_metrics_to_figure(fig, metrics_dict)
+    fig = add_metrics_to_figure(fig, metrics_dict, backtest_runs)
 
     # Start from row 3 as rows 1-2 are used by equity plot and metrics
     table_row = 3
