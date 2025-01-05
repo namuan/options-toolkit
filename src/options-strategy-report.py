@@ -229,34 +229,58 @@ def calculate_monthly_win_rates_per_dte(dfs_dict):
     return monthly_win_rates_dict
 
 
+def parse_strategy_params(raw_params):
+    return dict(param.split("=") for param in raw_params.split(","))
+
+
+def get_varying_strategy_params(backtest_runs):
+    # Parse all parameter sets
+    all_params = [parse_strategy_params(run.raw_params) for run in backtest_runs]
+
+    # Find parameters that vary across runs
+    varying_params = {}
+    if all_params:
+        param_keys = set().union(*[p.keys() for p in all_params])
+        excluded_keys = {"verbose", "db_path", "start_date", "end_date", "None"}
+
+        for key in param_keys - excluded_keys:
+            values = {params.get(key) for params in all_params if key in params}
+            if len(values) > 1:
+                varying_params[key] = True
+
+    return varying_params
+
+
 def add_metrics_to_figure(fig, metrics_dict, backtest_runs):
     metrics_df = pd.DataFrame.from_dict(metrics_dict, orient="index")
-    metrics_df.index = [dte for dte in metrics_df.index]
+
+    # Get parameters that have different values across runs
+    varying_params = get_varying_strategy_params(backtest_runs)
 
     # Create parameters column
     params_list = []
     for idx in metrics_df.index:
-        print(metrics_df.loc[idx])
-        backtest_run_row = next(
-            (row for row in backtest_runs if row.table_name_key == idx), None
+        backtest_run = next(
+            (run for run in backtest_runs if run.table_name_key == idx), None
         )
-        if backtest_run_row:
-            raw_params_dict = {
-                k: v
-                for k, v in (
-                    x.split("=") for x in backtest_run_row.raw_params.split(",")
-                )
-                if k not in ("verbose", "db_path", "start_date", "end_date")
-                and v != "None"
-            }
-            params = "<br>".join(f"{k}={v}" for k, v in raw_params_dict.items())
-            params_list.append(params)
+
+        if backtest_run:
+            params = parse_strategy_params(backtest_run.raw_params)
+            # Filter only varying parameters
+            filtered_params = {k: v for k, v in params.items() if k in varying_params}
+            formatted_params = "<br>".join(
+                f"{k}={v}" for k, v in filtered_params.items()
+            )
+            params_list.append(formatted_params)
         else:
             params_list.append("")
 
+    # Create table
     header_values = ["Table Key", "Parameters"] + list(metrics_df.columns)
-    cell_values = [metrics_df.index, params_list] + [
-        metrics_df[col] for col in metrics_df.columns
+    cell_values = [
+        metrics_df.index,
+        params_list,
+        *[metrics_df[col] for col in metrics_df.columns],
     ]
 
     # Add table trace
