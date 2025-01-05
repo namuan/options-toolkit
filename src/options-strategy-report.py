@@ -131,6 +131,15 @@ def calculate_portfolio_metrics(df):
     # Calculate total cumulative premium
     total_premium = float(df["PremiumKept"].sum())
 
+    # Calculate trade duration metrics
+    df["Date"] = pd.to_datetime(df["Date"])
+    df["ClosedTradeAt"] = pd.to_datetime(df["ClosedTradeAt"])
+    df["TradeDuration"] = (df["ClosedTradeAt"] - df["Date"]).dt.days
+
+    avg_duration = df["TradeDuration"].mean()
+    min_duration = df["TradeDuration"].min()
+    max_duration = df["TradeDuration"].max()
+
     # Store metrics with proper formatting
     metrics["Total Trades"] = total_trades
     metrics["Win Rate"] = f"{win_rate:.2f}%"
@@ -141,6 +150,9 @@ def calculate_portfolio_metrics(df):
     metrics["Max Loser ($)"] = f"${max_loser:.2f}"
     metrics["Expectancy Ratio"] = f"{expectancy_ratio:.2f}"
     metrics["Total Cumulative ($)"] = f"${total_premium:.2f}"
+    metrics["Avg Days Held"] = f"{avg_duration:.1f}"
+    metrics["Min Days Held"] = f"{min_duration:.0f}"
+    metrics["Max Days Held"] = f"{max_duration:.0f}"
 
     return metrics
 
