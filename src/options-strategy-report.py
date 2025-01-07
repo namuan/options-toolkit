@@ -12,9 +12,28 @@ Additionally, calculates and displays portfolio performance metrics for each DTE
 input:
     - Path to SQLite database file
     - Optional: Graph title
+    - Optional: Start datetime to filter backtest runs
+    - Optional: End datetime to filter backtest runs
 output:
     - Interactive equity graph showing the cumulative premium kept over time for different DTEs
     - Portfolio performance metrics table in console and HTML
+
+Example usage:
+
+Basic:
+python options-strategy-report.py --db-path data/trades.db --strategy-name ShortPutStrategy
+
+With title:
+python options-strategy-report.py --db-path data/trades.db --strategy-name ShortPutStrategy --title "Short Put Strategy Analysis"
+
+Save to file:
+python options-strategy-report.py --db-path data/trades.db --strategy-name ShortPutStrategy --output report.html
+
+Filter by date range:
+python options-strategy-report.py --db-path data/trades.db --strategy-name ShortPutStrategy --start-datetime "2024-01-01 00:00:00" --end-datetime "2024-12-31 23:59:59"
+
+Increase verbosity:
+python options-strategy-report.py --db-path data/trades.db --strategy-name ShortPutStrategy -v
 """
 
 import argparse
@@ -414,12 +433,16 @@ def plot_equity_graph(fig, dfs_dict):
     return fig
 
 
-def generate_report(db_path, strategy_name, title):
+def generate_report(
+    db_path, strategy_name, title, start_datetime=None, end_datetime=None
+):
     print(
         f"\nFetching data from database: {db_path} looking for strategy {strategy_name}"
     )
 
-    backtest_runs = _fetch_backtest_run_rows(db_path, strategy_name)
+    backtest_runs = _fetch_backtest_run_rows(
+        db_path, strategy_name, start_datetime, end_datetime
+    )
     logging.debug(
         f"Found {len(backtest_runs)} backtest runs for strategy {strategy_name}"
     )
@@ -574,15 +597,40 @@ def generate_report(db_path, strategy_name, title):
     return fig
 
 
-def _fetch_backtest_run_rows(db_path, strategy_name):
+def _fetch_backtest_run_rows(
+    db_path, strategy_name, start_datetime=None, end_datetime=None
+):
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM backtest_runs WHERE Strategy=?", (strategy_name,))
+
+    query = "SELECT * FROM backtest_runs WHERE Strategy=?"
+    params = [strategy_name]
+
+    if start_datetime:
+        start_dt = validate_datetime(start_datetime)
+        query += " AND DateTime >= ?"
+        params.append(str(start_dt))
+
+    if end_datetime:
+        end_dt = validate_datetime(end_datetime)
+        query += " AND DateTime <= ?"
+        params.append(str(end_dt))
+
+    cursor.execute(query, params)
     rows = cursor.fetchall()
     result = []
     for row in rows:
         result.append(BacktestRun(*row))
     return result
+
+
+def validate_datetime(datetime_str):
+    try:
+        return pd.to_datetime(datetime_str)
+    except ValueError as e:
+        raise ValueError(
+            f"Invalid datetime format: {datetime_str}. Expected format: YYYY-MM-DD HH:MM:SS"
+        ) from e
 
 
 def parse_arguments():
@@ -615,6 +663,16 @@ def parse_arguments():
         default="<< Missing Report Title >> - Cumulative Premium Kept by DTE",
         help="Optional: Title for the equity graph",
     )
+    parser.add_argument(
+        "--start-datetime",
+        type=str,
+        help="Filter runs after this datetime (format: YYYY-MM-DD HH:MM:SS)",
+    )
+    parser.add_argument(
+        "--end-datetime",
+        type=str,
+        help="Filter runs before this datetime (format: YYYY-MM-DD HH:MM:SS)",
+    )
     return parser.parse_args()
 
 
@@ -622,7 +680,13 @@ def main():
     args = parse_arguments()
     setup_logging(args.verbose)
 
-    fig = generate_report(args.db_path, args.strategy_name, args.title)
+    fig = generate_report(
+        args.db_path,
+        args.strategy_name,
+        args.title,
+        start_datetime=args.start_datetime,
+        end_datetime=args.end_datetime,
+    )
 
     if not fig:
         return
