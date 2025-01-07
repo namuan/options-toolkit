@@ -129,6 +129,11 @@ Longer Run (Single DTE)
 ./src/options-short-straddle-simple.py --db-path data/spx_eod.db --force-close-after-days 10 --dte 45 --profit-take 10 --stop-loss 75 --max-open-trades 1 -v
 ```
 
+RSI Filter
+```shell
+./src/options-short-straddle-simple.py --db-path data/spx_eod.db --force-close-after-days 10 --dte 45 --profit-take 10 --stop-loss 75 --max-open-trades 5 --rsi 4 --rsi-low-threshold 30 --rsi-high-threshold 100 -v
+```
+
 ```shell
 for hvcw in {1..2}; do
   echo "Running for High Vol Check Window: $hvcw"
@@ -155,7 +160,7 @@ STRATEGY=ShortStraddleStrategy;./src/options-trade-plotter.py --db-path data/spx
 ```
 
 ```shell
-STRATEGY=ShortStraddleStrategy; ./src/options-strategy-report.py --db-path data/spx_eod.db --strategy-name ${STRATEGY}
+STRATEGY=ShortStraddleRsiFilterStrategy; ./src/options-strategy-report.py --db-path data/spx_eod.db --strategy-name ${STRATEGY} --start-datetime "2025-01-07 11:10:51" --end-datetime "2025-01-07 11:22:41"
 ```
 
 ## Testing
@@ -209,6 +214,23 @@ for rsi in "${rsi_values[@]}"; do
 done
 
 STRATEGY=ShortPutStrategy; ./src/options-strategy-report.py --db-path data/spx_eod.db --strategy-name ${STRATEGY}
+```
+
+With different RSI values
+
+```shell
+rsi_values=(3 5 7 9 11 13)
+rsi_low_values=(0 30)
+rsi_high_values=(100)
+
+for rsi in "${rsi_values[@]}"; do
+  for rsi_low in "${rsi_low_values[@]}"; do
+    for rsi_high in "${rsi_high_values[@]}"; do
+        echo "Running with RSI: $rsi: RSI Low: $rsi_low RSI High: $rsi_high"
+        ./src/options-short-straddle-simple.py --db-path data/spx_eod.db --force-close-after-days 10 --dte 45 --profit-take 10 --stop-loss 75 --max-open-trades 5 --rsi $rsi --rsi-low-threshold $rsi_low --rsi-high-threshold $rsi_high -v
+    done
+  done
+done
 ```
 
 ## Drop all transaction tables
