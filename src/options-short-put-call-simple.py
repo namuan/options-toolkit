@@ -13,10 +13,7 @@ import logging
 from argparse import ArgumentParser, RawDescriptionHelpFormatter
 from typing import Optional
 
-from stockstats import wrap
-
 from logger import setup_logging
-from market_data import download_ticker_data
 from options_analysis import (
     ContractType,
     GenericRunner,
@@ -27,6 +24,7 @@ from options_analysis import (
     PositionType,
     Trade,
     add_standard_cli_arguments,
+    load_market_data,
 )
 
 
@@ -86,9 +84,9 @@ class ShortPutCallStrategy(GenericRunner):
         self.external_df = None
 
     def pre_run(self, options_db, quote_dates):
-        self.external_df = wrap(
-            download_ticker_data("SPY", start=quote_dates[0], end=quote_dates[-1])
-        )
+        underlying = "SPY"
+        market_data = load_market_data(quote_dates, [underlying])
+        self.external_df = market_data[underlying]
         _ = self.external_df[self.rsi_indicator]
 
     def allowed_to_create_new_trade(self, options_db, data_for_trade_management):

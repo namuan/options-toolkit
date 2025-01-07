@@ -2,6 +2,7 @@
 # /// script
 # dependencies = [
 #   "pandas",
+#   "stockstats",
 #   "yfinance",
 #   "persistent-cache@git+https://github.com/namuan/persistent-cache",
 # ]
@@ -14,7 +15,6 @@ import pandas as pd
 from pandas import DataFrame
 
 from logger import setup_logging
-from market_data import download_ticker_data
 from options_analysis import (
     ContractType,
     DataForTradeManagement,
@@ -26,6 +26,7 @@ from options_analysis import (
     PositionType,
     Trade,
     add_standard_cli_arguments,
+    load_market_data,
 )
 
 
@@ -57,14 +58,11 @@ def parse_args():
 
 def pull_external_data(quote_dates, window) -> DataFrame:
     symbols = ["^VIX9D", "^VIX"]
-    market_data = {
-        symbol: download_ticker_data(symbol, start=quote_dates[0], end=quote_dates[-1])
-        for symbol in symbols
-    }
+    market_data = load_market_data(quote_dates, symbols)
 
     df = pd.DataFrame()
-    df["Short_Term_VIX"] = market_data["^VIX9D"]["Close"]
-    df["Long_Term_VIX"] = market_data["^VIX"]["Close"]
+    df["Short_Term_VIX"] = market_data["^VIX9D"]["close"]
+    df["Long_Term_VIX"] = market_data["^VIX"]["close"]
     df["IVTS"] = df["Short_Term_VIX"] / df["Long_Term_VIX"]
     df[f"IVTS_Med_{window}"] = df["IVTS"].rolling(window=window).median()
     df["High_Vol_Signal"] = (df[f"IVTS_Med_{window}"] < 1).astype(int) * 2 - 1

@@ -11,10 +11,7 @@ import logging
 from argparse import ArgumentParser, RawDescriptionHelpFormatter
 from typing import Optional
 
-from stockstats import wrap
-
 from logger import setup_logging
-from market_data import download_ticker_data
 from options_analysis import (
     ContractType,
     GenericRunner,
@@ -25,6 +22,7 @@ from options_analysis import (
     PositionType,
     Trade,
     add_standard_cli_arguments,
+    load_market_data,
 )
 
 
@@ -40,10 +38,10 @@ def parse_args():
         help="Option DTE",
     )
     parser.add_argument(
-        "--short-delta",
+        "--short-put-delta",
         type=float,
         default=0.5,
-        help="Short delta value",
+        help="Short Put delta value",
     )
     parser.add_argument(
         "--rsi",
@@ -62,7 +60,7 @@ class ShortPutStrategy(GenericRunner):
     def __init__(self, args):
         super().__init__(args)
         self.dte = args.dte
-        self.short_delta = args.short_delta
+        self.short_delta = args.short_put_delta
         self.rsi_check_required = args.rsi and args.rsi_low_threshold
         self.rsi_indicator = f"rsi_{args.rsi}"
         self.rsi_low_threshold = args.rsi_low_threshold
@@ -70,9 +68,9 @@ class ShortPutStrategy(GenericRunner):
 
     def pre_run(self, options_db, quote_dates):
         if self.rsi_check_required:
-            self.external_df = wrap(
-                download_ticker_data("SPY", start=quote_dates[0], end=quote_dates[-1])
-            )
+            underlying = "SPY"
+            market_data = load_market_data(quote_dates, [underlying])
+            self.external_df = market_data[underlying]
             _ = self.external_df[self.rsi_indicator]
 
     def allowed_to_create_new_trade(self, options_db, data_for_trade_management):

@@ -76,6 +76,13 @@ for dte in {7..60}; do
 done
 ```
 
+**RSI Filter**
+
+```shell
+./src/options-short-put-simple.py --db-path data/spx_eod.db --short-put-delta 0.2 --dte 45 --max-open-trades 5 --rsi 4 --rsi-low-threshold 15 --force-close-after-days 20 --profit-take 50 --stop-loss 75 -vv
+```
+
+
 ```shell
 STRATEGY=ShortPutStrategy;./src/options-trade-plotter.py --db-path data/spx_eod.db --strategy-name ${STRATEGY} --table-name-key `sqlite3 data/spx_eod.db "SELECT RawParams, TableNameKey from backtest_runs where Strategy = '"${STRATEGY}"'" | sed 's/verbose=1,db_path=data\/spx_eod.db,//; s/,start_date=None,end_date=None//' | fzf | awk -F\| '{print $2}'`
 ```
