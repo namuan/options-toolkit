@@ -8,9 +8,6 @@ from enum import Enum
 from typing import Dict, List, Optional, Tuple
 
 import pandas as pd
-from stockstats import wrap
-
-from market_data import download_ticker_data
 
 
 def calculate_date_difference(
@@ -754,16 +751,6 @@ class DataForTradeManagement:
     profit_take: float
     stop_loss: float
     quote_date: str
-
-
-def load_market_data(quote_dates, symbols):
-    market_data = {
-        symbol: wrap(
-            download_ticker_data(symbol, start=quote_dates[0], end=quote_dates[-1])
-        )
-        for symbol in symbols
-    }
-    return market_data
 
 
 def check_profit_take_stop_loss_targets(

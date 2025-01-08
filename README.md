@@ -110,7 +110,7 @@ STRATEGY=ShortPutCallStrategy; ./src/options-strategy-report.py --db-path data/s
 ### Long Put Calendar
 
 ```shell
-./src/options-calendar-simple.py --db-path data/spx_eod.db --front-dte 20 --back-dte 50 --max-open-trades 1 -v
+./src/options-calendar-simple.py --db-path data/spx_eod.db --front-dte 30 --back-dte 60 --max-open-trades 1 -v
 ```
 
 ```shell
@@ -176,7 +176,7 @@ echo "Should see 3 trades"
 ```
 
 ```shell
-./src/options-short-put-simple.py --db-path data/spx_eod.db --short-delta 0.5 --dte 45 --start-date 2020-01-01 --end-date 2020-03-30 --max-open-trades 1 --profit-take 10 --stop-loss 75 -v
+./src/options-short-put-simple.py --db-path data/spx_eod.db --short-put-delta 0.5 --dte 45 --start-date 2020-01-01 --end-date 2020-03-30 --max-open-trades 1 --profit-take 10 --stop-loss 75 -v
 echo "Should see 22 trades"
 ```
 

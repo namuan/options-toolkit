@@ -15,6 +15,7 @@ import pandas as pd
 from pandas import DataFrame
 
 from logger import setup_logging
+from market_data import load_market_data
 from options_analysis import (
     ContractType,
     DataForTradeManagement,
@@ -26,7 +27,6 @@ from options_analysis import (
     PositionType,
     Trade,
     add_standard_cli_arguments,
-    load_market_data,
 )
 
 

@@ -12,6 +12,7 @@ from argparse import ArgumentParser, RawDescriptionHelpFormatter
 from typing import Optional
 
 from logger import setup_logging
+from market_data import load_market_data
 from options_analysis import (
     ContractType,
     GenericRunner,
@@ -22,7 +23,6 @@ from options_analysis import (
     PositionType,
     Trade,
     add_standard_cli_arguments,
-    load_market_data,
 )
 
 
