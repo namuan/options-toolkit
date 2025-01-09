@@ -69,6 +69,7 @@ class Leg:
     vega: Optional[float] = None
     theta: Optional[float] = None
     iv: Optional[float] = None
+    historyId: Optional[str] = None
 
     def __post_init__(self):
         # Convert premiums after initialization
@@ -87,6 +88,7 @@ class Leg:
     def __str__(self):
         leg_str = [
             f"\n    {self.position_type.value} {self.contract_type.value}",
+            f"\n      HistoryId: {self.historyId}",
             f"\n      Date: {self.leg_quote_date}",
             f"\n      Expiry Date: {self.leg_expiry_date}",
             f"\n      Strike: ${self.strike_price:,.2f}",
@@ -260,6 +262,7 @@ class OptionsDatabase:
             vega=leg_row["Vega"],
             theta=leg_row["Theta"],
             iv=leg_row["Iv"],
+            historyId=leg_row["HistoryId"],
         )
 
     def build_trade_from(self, trade_row, trade_legs):
@@ -479,16 +482,7 @@ class OptionsDatabase:
         if not trade_row:
             raise ValueError(f"Trade with id {trade_id} not found")
 
-        leg_rows = self.leg_rows_from_db(trade_id, leg_type)
-
-        # Create legs
-        trade_legs = []
-
-        for leg_row in leg_rows:
-            leg = self.build_leg_from_row(leg_row)
-            trade_legs.append(leg)
-
-        # Create and return trade
+        trade_legs = self.trade_legs_from_db(trade_id, leg_type)
         return self.build_trade_from(trade_row, trade_legs)
 
     def update_trade_legs(
@@ -507,6 +501,7 @@ class OptionsDatabase:
                 continue
 
             updated_leg = Leg(
+                historyId=leg.historyId,
                 leg_quote_date=quote_date,
                 leg_expiry_date=leg.leg_expiry_date,
                 contract_type=leg.contract_type,
@@ -518,7 +513,7 @@ class OptionsDatabase:
                 premium_current=od.p_last
                 if leg.contract_type is ContractType.PUT
                 else od.c_last,
-                leg_type=LegType.TRADE_AUDIT,
+                leg_type=leg.leg_type,
                 delta=od.p_delta
                 if leg.contract_type is ContractType.PUT
                 else od.c_delta,
@@ -545,7 +540,7 @@ class OptionsDatabase:
         # Then get legs for this trade
         if leg_type is None:
             legs_sql = f"""
-            SELECT Date, ExpiryDate, StrikePrice, ContractType, PositionType, PremiumOpen,
+            SELECT HistoryId, Date, ExpiryDate, StrikePrice, ContractType, PositionType, PremiumOpen,
                    PremiumCurrent, UnderlyingPriceOpen, UnderlyingPriceCurrent, LegType,
                    Delta, Gamma, Vega, Theta, Iv
             FROM {self.trade_legs_table} WHERE TradeId = ?
@@ -553,7 +548,7 @@ class OptionsDatabase:
             params = (trade_id,)
         else:
             legs_sql = f"""
-            SELECT Date, ExpiryDate, StrikePrice, ContractType, PositionType, PremiumOpen,
+            SELECT HistoryId, Date, ExpiryDate, StrikePrice, ContractType, PositionType, PremiumOpen,
                    PremiumCurrent, UnderlyingPriceOpen, UnderlyingPriceCurrent, LegType,
                    Delta, Gamma, Vega, Theta, Iv
             FROM {self.trade_legs_table} WHERE TradeId = ? AND LegType = ?
@@ -580,14 +575,7 @@ class OptionsDatabase:
         trades = []
         for trade_row in trade_rows:
             trade_id = trade_row["TradeId"]
-            leg_rows = self.leg_rows_from_db(trade_id)
-            # Create legs
-            trade_legs = []
-            for leg_row in leg_rows:
-                leg = self.build_leg_from_row(leg_row)
-                trade_legs.append(leg)
-
-            # Create trade
+            trade_legs = self.trade_legs_from_db(trade_id)
             trade = self.build_trade_from(trade_row, trade_legs)
             trades.append(trade)
 
@@ -742,6 +730,10 @@ class OptionsDatabase:
             return OptionsData(*result)
 
         return None
+
+    def trade_legs_from_db(self, trade_id, leg_type=None):
+        leg_rows = self.leg_rows_from_db(trade_id, leg_type)
+        return [self.build_leg_from_row(leg_row) for leg_row in leg_rows]
 
 
 # Options Strategy Runner Framework
@@ -975,9 +967,13 @@ class GenericRunner:
 
                     for leg in updated_legs:
                         leg.leg_type = (
-                            LegType.TRADE_CLOSE
-                            if trade_can_be_closed
-                            else LegType.TRADE_AUDIT
+                            (
+                                LegType.TRADE_CLOSE
+                                if trade_can_be_closed
+                                else LegType.TRADE_AUDIT
+                            )
+                            if leg.historyId
+                            else leg.leg_type
                         )
                         db.update_trade_leg(existing_trade_id, leg)
 

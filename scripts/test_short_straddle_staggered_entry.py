@@ -76,7 +76,7 @@ class ShortStraddleStaggeredEntryStrategy(GenericRunner):
     def __init__(self, args):
         super().__init__(args)
         self.dte = args.dte
-        self.total_contracts = 5  # Move to params
+        self.total_contracts = args.no_contracts
 
     def build_trade(self, options_db, quote_date) -> Optional[Trade]:
         expiry_dte, dte_found = options_db.get_next_expiry_by_dte(quote_date, self.dte)
@@ -107,6 +107,10 @@ class ShortStraddleStaggeredEntryStrategy(GenericRunner):
     ) -> Trade:
         existing_expiry = existing_trade.expire_date
         trade_leg_before = len(existing_trade.legs)
+        # Make sure we only a certain number of contracts
+        if trade_leg_before >= self.total_contracts * 2:
+            return existing_trade
+
         new_legs, _ = calculate_legs_for_straddle(db, quote_date, existing_expiry)
         for nl in new_legs:
             existing_trade.legs.append(nl)
@@ -121,7 +125,7 @@ class ShortStraddleStaggeredEntryStrategy(GenericRunner):
 
 class TestShortStraddleStaggeredEntryStrategy(unittest.TestCase):
     def setUp(self):
-        self.no_contracts = 5
+        self.no_contracts = 1
         self.dte = 30
         self.db_path = Path().cwd().parent / "data" / "test_spx_eod.db"
         self.args = Namespace(
@@ -134,6 +138,7 @@ class TestShortStraddleStaggeredEntryStrategy(unittest.TestCase):
             end_date=None,
             profit_take=None,
             stop_loss=None,
+            no_contracts=self.no_contracts,
         )
         assert self.db_path.exists()
         self.prepare_database()
