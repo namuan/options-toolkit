@@ -6,70 +6,11 @@ from pathlib import Path
 from typing import Optional
 
 from options_analysis import (
-    ContractType,
     GenericRunner,
-    Leg,
-    LegType,
-    OptionsData,
     OptionsDatabase,
-    PositionType,
     Trade,
+    calculate_legs_for_straddle,
 )
-
-
-def calculate_legs_for_straddle(
-    options_db, quote_date, expiry_dte
-) -> tuple[list[Leg], Optional[float]]:
-    od: OptionsData = options_db.get_options_data_closest_to_price(
-        quote_date, expiry_dte
-    )
-    if not od or od.p_last in [None, 0] or od.c_last in [None, 0]:
-        logging.warning(
-            "⚠️ Bad data found: "
-            + (
-                "One or more options are not valid"
-                if not od
-                else f"On {quote_date=} for {expiry_dte=}, one of {od.c_last=}, {od.p_last=} is not valid"
-            )
-        )
-        return [], None
-
-    trade_legs = [
-        Leg(
-            leg_quote_date=quote_date,
-            leg_expiry_date=expiry_dte,
-            leg_type=LegType.TRADE_OPEN,
-            position_type=PositionType.SHORT,
-            contract_type=ContractType.PUT,
-            strike_price=od.strike,
-            underlying_price_open=od.underlying_last,
-            premium_open=od.p_last,
-            premium_current=0,
-            delta=od.p_delta,
-            gamma=od.p_gamma,
-            vega=od.p_vega,
-            theta=od.p_theta,
-            iv=od.p_iv,
-        ),
-        Leg(
-            leg_quote_date=quote_date,
-            leg_expiry_date=expiry_dte,
-            leg_type=LegType.TRADE_OPEN,
-            position_type=PositionType.SHORT,
-            contract_type=ContractType.CALL,
-            strike_price=od.strike,
-            underlying_price_open=od.underlying_last,
-            premium_open=od.c_last,
-            premium_current=0,
-            delta=od.c_delta,
-            gamma=od.c_gamma,
-            vega=od.c_vega,
-            theta=od.c_theta,
-            iv=od.c_iv,
-        ),
-    ]
-    premium_captured_calculated = round(sum(leg.premium_open for leg in trade_legs), 2)
-    return trade_legs, premium_captured_calculated
 
 
 class ShortStraddleStaggeredEntryStrategy(GenericRunner):
