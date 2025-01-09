@@ -405,6 +405,8 @@ class OptionsDatabase:
             updated_leg.iv,
         )
 
+        logging.debug(f"update_trade_leg query:\n{update_leg_sql} ({params})")
+
         self.cursor.execute(update_leg_sql, params)
         self.conn.commit()
 
@@ -489,9 +491,11 @@ class OptionsDatabase:
         # Create and return trade
         return self.build_trade_from(trade_row, trade_legs)
 
-    def update_trade_legs(self, existing_trade, quote_date) -> List[Dict[str, Leg]]:
+    def update_trade_legs(
+        self, existing_trade_legs, quote_date
+    ) -> List[Dict[str, Leg]]:
         updated_legs = []
-        for leg in existing_trade.legs:
+        for leg in existing_trade_legs:
             updates = {}
             od: OptionsData = self.get_current_options_data(
                 quote_date, leg.strike_price, leg.leg_expiry_date
@@ -754,13 +758,13 @@ class DataForTradeManagement:
 
 
 def check_profit_take_stop_loss_targets(
-    profit_take, stop_loss, existing_trade, updated_legs
+    profit_take, stop_loss, existing_trade_premium_captured, updated_legs
 ):
     current_premium_value = round(sum(l.premium_current for l in updated_legs), 2)
     total_premium_received = (
-        existing_trade.premium_captured + 0.001
-        if existing_trade.premium_captured == 0
-        else existing_trade.premium_captured
+        existing_trade_premium_captured + 0.001
+        if existing_trade_premium_captured == 0
+        else existing_trade_premium_captured
     )  # to avoid divide by zero error
     premium_diff = total_premium_received - current_premium_value
     premium_diff_pct = (premium_diff / total_premium_received) * 100
@@ -882,11 +886,11 @@ def add_standard_cli_arguments(parser):
     )
 
 
-def check_if_passed_days(data_for_trade_management, existing_trade):
+def check_if_passed_days(data_for_trade_management, existing_trade_trade_date):
     if not data_for_trade_management.force_close_after_days:
         return False
 
-    trade_start_date = existing_trade.trade_date
+    trade_start_date = existing_trade_trade_date
     current_date = data_for_trade_management.quote_date
     days_passed = calculate_date_difference(trade_start_date, current_date)
     return days_passed >= data_for_trade_management.force_close_after_days
@@ -940,17 +944,32 @@ class GenericRunner:
                     logging.info(
                         f"{data_for_trade_management.quote_date} => Updating existing trade {existing_trade_id}"
                     )
-                    existing_trade = db.load_trade_with_multiple_legs(
+
+                    trade_from_db = db.load_trade_with_multiple_legs(
                         existing_trade_id, leg_type=LegType.TRADE_OPEN
                     )
+                    existing_trade = (
+                        self.adjust_trade(db, trade_from_db, quote_date)
+                        if (
+                            hasattr(self, "adjust_trade")
+                            and self.adjust_trade.__func__
+                            is not GenericRunner.adjust_trade
+                        )
+                        else trade_from_db
+                    )
+
                     trade_legs_with_updates = db.update_trade_legs(
-                        existing_trade, data_for_trade_management.quote_date
+                        existing_trade.legs, data_for_trade_management.quote_date
                     )
                     updated_legs = [item["updated"] for item in trade_legs_with_updates]
 
                     close_reason, trade_can_be_closed = (
                         self.check_if_trade_can_be_closed(
-                            data_for_trade_management, existing_trade, updated_legs
+                            data_for_trade_management,
+                            existing_trade.premium_captured,
+                            existing_trade.trade_date,
+                            existing_trade.expire_date,
+                            updated_legs,
                         )
                     )
 
@@ -999,21 +1018,26 @@ class GenericRunner:
             logging.info(f"Trade {trade_id} created in database")
 
     def check_if_trade_can_be_closed(
-        self, data_for_trade_management, existing_trade: Trade, updated_legs
+        self,
+        data_for_trade_management,
+        trade_premium_captured,
+        trade_start_date,
+        trade_expire_date,
+        updated_legs,
     ):
         close_reason, trade_can_be_closed = check_profit_take_stop_loss_targets(
             data_for_trade_management.profit_take,
             data_for_trade_management.stop_loss,
-            existing_trade,
+            trade_premium_captured,
             updated_legs,
         )
         if trade_can_be_closed:
             return close_reason, True
 
-        if data_for_trade_management.quote_date >= existing_trade.expire_date:
+        if data_for_trade_management.quote_date >= trade_expire_date:
             return "EXPIRED", True
 
-        if check_if_passed_days(data_for_trade_management, existing_trade):
+        if check_if_passed_days(data_for_trade_management, trade_start_date):
             return "FORCE_CLOSED_AFTER_DAYS", True
 
         return "", False
@@ -1034,10 +1058,14 @@ class GenericRunner:
         return True
 
     @abstractmethod
-    def build_trade(self, options_db, quote_date) -> Optional[Trade]:
+    def build_trade(self, db, quote_date) -> Optional[Trade]:
         pass
 
     def pre_run(self, db, quote_dates):
+        pass
+
+    @abstractmethod
+    def adjust_trade(self, db, existing_trade, quote_date) -> Trade:
         pass
 
 
