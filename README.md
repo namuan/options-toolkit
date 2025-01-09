@@ -123,15 +123,10 @@ STRATEGY=LongPutCalendarStrategy; ./scripts/options-strategy-report.py --db-path
 
 ### Short Straddle
 
-Longer Run (Single DTE)
+Longer Run
 
 ```shell
-./scripts/options-short-straddle-simple.py --db-path data/spx_eod.db --force-close-after-days 10 --dte 45 --profit-take 10 --stop-loss 75 --max-open-trades 1 -v
-```
-
-RSI Filter
-```shell
-./scripts/options-short-straddle-simple.py --db-path data/spx_eod.db --force-close-after-days 10 --dte 45 --profit-take 10 --stop-loss 75 --max-open-trades 5 --rsi 4 --rsi-low-threshold 30 --rsi-high-threshold 100 -v
+./scripts/options-short-straddle-simple.py --db-path data/spx_eod.db --number-of-contracts 1 --force-close-after-days 10 --dte 45 --profit-take 10 --stop-loss 75 --max-open-trades 5 --rsi 4 --rsi-low-threshold 30 --rsi-high-threshold 100 -v
 ```
 
 ```shell
@@ -156,11 +151,11 @@ done
 ```
 
 ```shell
-STRATEGY=ShortStraddleStrategy;./scripts/options-trade-plotter.py --db-path data/spx_eod.db --strategy-name ${STRATEGY} --table-name-key `sqlite3 data/spx_eod.db "SELECT RawParams, TableNameKey from backtest_runs where Strategy = '"${STRATEGY}"'" | fzf | awk -F\| '{print $2}'`
+STRATEGY=ShortStraddleStaggeredEntryStrategy;./scripts/options-trade-plotter.py --db-path data/spx_eod.db --strategy-name ${STRATEGY} --table-name-key `sqlite3 data/spx_eod.db "SELECT RawParams, TableNameKey from backtest_runs where Strategy = '"${STRATEGY}"'" | fzf | awk -F\| '{print $2}'`
 ```
 
 ```shell
-STRATEGY=ShortStraddleRsiFilterStrategy; ./scripts/options-strategy-report.py --db-path data/spx_eod.db --strategy-name ${STRATEGY} --start-datetime "2025-01-07 11:10:51" --end-datetime "2025-01-07 11:22:41"
+STRATEGY=ShortStraddleStaggeredEntryStrategy; ./scripts/options-strategy-report.py --db-path data/spx_eod.db --strategy-name ${STRATEGY}
 ```
 
 ## Testing
@@ -181,11 +176,11 @@ echo "Should see 22 trades"
 ```
 
 ```shell
-STRATEGY=ShortStraddleStrategy;./scripts/options-trade-plotter.py --db-path data/spx_eod.db --strategy-name ${STRATEGY} --table-name-key `sqlite3 data/spx_eod.db "SELECT RawParams, TableNameKey from backtest_runs where Strategy = '"${STRATEGY}"'" | fzf | awk -F\| '{print $2}'`
+STRATEGY=ShortStraddleStaggeredEntryStrategy;./scripts/options-trade-plotter.py --db-path data/spx_eod.db --strategy-name ${STRATEGY} --table-name-key `sqlite3 data/spx_eod.db "SELECT RawParams, TableNameKey from backtest_runs where Strategy = '"${STRATEGY}"'" | fzf | awk -F\| '{print $2}'`
 ```
 
 ```shell
-STRATEGY=ShortStraddleStrategy; ./scripts/options-strategy-report.py --db-path data/spx_eod.db --strategy-name ${STRATEGY}
+STRATEGY=ShortStraddleStaggeredEntryStrategy; ./scripts/options-strategy-report.py --db-path data/spx_eod.db --strategy-name ${STRATEGY}
 ```
 
 ```shell
