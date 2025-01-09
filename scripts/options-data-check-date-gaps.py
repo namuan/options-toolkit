@@ -20,7 +20,6 @@ from argparse import ArgumentParser, RawDescriptionHelpFormatter
 from pathlib import Path
 
 import pandas as pd
-
 from logger import setup_logging
 
 

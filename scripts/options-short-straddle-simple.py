@@ -12,8 +12,6 @@ from argparse import ArgumentParser, RawDescriptionHelpFormatter
 from typing import Optional
 
 import pandas as pd
-from pandas import DataFrame
-
 from logger import setup_logging
 from market_data import load_market_data
 from options_analysis import (
@@ -28,6 +26,7 @@ from options_analysis import (
     Trade,
     add_standard_cli_arguments,
 )
+from pandas import DataFrame
 
 
 def parse_args():
@@ -242,6 +241,87 @@ class ShortStraddleRsiFilterStrategy(GenericRunner):
             return self.rsi_low_threshold < rsi_value < self.rsi_high_threshold
         else:
             return False
+
+    def build_trade(self, options_db, quote_date) -> Optional[Trade]:
+        expiry_dte, dte_found = options_db.get_next_expiry_by_dte(quote_date, self.dte)
+        if not expiry_dte:
+            logging.warning(f"⚠️ Unable to find {self.dte} expiry. {expiry_dte=}")
+            return None
+
+        logging.debug(f"Quote date: {quote_date} -> {expiry_dte=} ({dte_found=:.1f}), ")
+
+        od: OptionsData = options_db.get_options_data_closest_to_price(
+            quote_date, expiry_dte
+        )
+        if not od or od.p_last in [None, 0] or od.c_last in [None, 0]:
+            logging.warning(
+                "⚠️ Bad data found: "
+                + (
+                    "One or more options are not valid"
+                    if not od
+                    else f"On {quote_date=}, one of {od.c_last=}, {od.p_last=} is not valid"
+                )
+            )
+            return None
+
+        logging.debug(
+            f"Contract ({expiry_dte=}): { od.underlying_last=:.2f}, { od.strike=:.2f}, { od.c_last=:.2f}, { od.p_last=:.2f}"
+        )
+
+        trade_legs = [
+            Leg(
+                leg_quote_date=quote_date,
+                leg_expiry_date=expiry_dte,
+                leg_type=LegType.TRADE_OPEN,
+                position_type=PositionType.SHORT,
+                contract_type=ContractType.PUT,
+                strike_price=od.strike,
+                underlying_price_open=od.underlying_last,
+                premium_open=od.p_last,
+                premium_current=0,
+                delta=od.p_delta,
+                gamma=od.p_gamma,
+                vega=od.p_vega,
+                theta=od.p_theta,
+                iv=od.p_iv,
+            ),
+            Leg(
+                leg_quote_date=quote_date,
+                leg_expiry_date=expiry_dte,
+                leg_type=LegType.TRADE_OPEN,
+                position_type=PositionType.SHORT,
+                contract_type=ContractType.CALL,
+                strike_price=od.strike,
+                underlying_price_open=od.underlying_last,
+                premium_open=od.c_last,
+                premium_current=0,
+                delta=od.c_delta,
+                gamma=od.c_gamma,
+                vega=od.c_vega,
+                theta=od.c_theta,
+                iv=od.c_iv,
+            ),
+        ]
+
+        premium_captured_calculated = round(
+            sum(leg.premium_open for leg in trade_legs), 2
+        )
+
+        return Trade(
+            trade_date=quote_date,
+            expire_date=expiry_dte,
+            dte=self.dte,
+            status="OPEN",
+            premium_captured=premium_captured_calculated,
+            legs=trade_legs,
+        )
+
+
+class ShortStraddleStaggeredEntryStrategy(GenericRunner):
+    def __init__(self, args):
+        super().__init__(args)
+        self.dte = args.dte
+        self.total_contracts = 5  # Move to params
 
     def build_trade(self, options_db, quote_date) -> Optional[Trade]:
         expiry_dte, dte_found = options_db.get_next_expiry_by_dte(quote_date, self.dte)

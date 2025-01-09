@@ -27,9 +27,8 @@ import dash
 import plotly.graph_objects as go
 from dash import Dash, dcc, html
 from dash.dependencies import Input, Output
-from plotly.subplots import make_subplots
-
 from options_analysis import LegType, OptionsDatabase, Trade, calculate_date_difference
+from plotly.subplots import make_subplots
 
 
 @dataclass
