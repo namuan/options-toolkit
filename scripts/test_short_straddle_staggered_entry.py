@@ -106,26 +106,20 @@ class ShortStraddleStaggeredEntryStrategy(GenericRunner):
         self, db: OptionsDatabase, existing_trade: Trade, quote_date
     ) -> Trade:
         existing_expiry = existing_trade.expire_date
-        trade_leg_before = len(existing_trade.legs)
-        # Make sure we only a certain number of contracts
-        if trade_leg_before >= self.total_contracts * 2:
+        # Make sure we only allow the specified number of contracts
+        if len(existing_trade.legs) >= (self.total_contracts * 2):
             return existing_trade
 
-        new_legs, _ = calculate_legs_for_straddle(db, quote_date, existing_expiry)
+        new_legs, premium = calculate_legs_for_straddle(db, quote_date, existing_expiry)
         for nl in new_legs:
             existing_trade.legs.append(nl)
-
-        trade_leg_after = len(existing_trade.legs)
-
-        print(
-            f"🔄{quote_date} -> {existing_trade.id} ->  {trade_leg_before=} -> {trade_leg_after=}"
-        )
+        existing_trade.premium_captured = existing_trade.premium_captured + premium
         return existing_trade
 
 
 class TestShortStraddleStaggeredEntryStrategy(unittest.TestCase):
     def setUp(self):
-        self.no_contracts = 1
+        self.no_contracts = 2
         self.dte = 30
         self.db_path = Path().cwd().parent / "data" / "test_spx_eod.db"
         self.args = Namespace(
@@ -142,7 +136,6 @@ class TestShortStraddleStaggeredEntryStrategy(unittest.TestCase):
         )
         assert self.db_path.exists()
         self.prepare_database()
-        self.strategy = ShortStraddleStaggeredEntryStrategy(self.args)
 
     def prepare_database(self):
         conn = sqlite3.connect(self.db_path)
@@ -189,7 +182,9 @@ class TestShortStraddleStaggeredEntryStrategy(unittest.TestCase):
         )
         trade_count = cursor.fetchone()[0]
         self.assertEqual(
-            trade_count, 1, f"Expected exactly 1 row in {self.trade_table_name} table"
+            trade_count,
+            1,
+            f"Expected exactly 1 CLOSED trade in {self.trade_table_name} table",
         )
 
         # Count trade legs for TradeId 1 on 5th day
@@ -212,8 +207,8 @@ class TestShortStraddleStaggeredEntryStrategy(unittest.TestCase):
         self.assertEqual(trade["ExpireDate"], "2020-02-03")
         self.assertEqual(trade["DTE"], 30)
         self.assertEqual(trade["Status"], "CLOSED")
-        self.assertEqual(trade["PremiumCaptured"], 71.92)
-        self.assertEqual(trade["ClosingPremium"], -13.4)
+        self.assertEqual(trade["PremiumCaptured"], 158.37)
+        self.assertEqual(trade["ClosingPremium"], -33.16)
         self.assertEqual(trade["ClosedTradeAt"], "2020-02-03")
         self.assertEqual(trade["CloseReason"], "EXPIRED")
 

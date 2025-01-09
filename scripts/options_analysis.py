@@ -1,4 +1,5 @@
 import argparse
+import dataclasses
 import logging
 import sqlite3
 from abc import abstractmethod
@@ -412,6 +413,38 @@ class OptionsDatabase:
 
         self.cursor.execute(update_leg_sql, params)
         self.conn.commit()
+
+    def update_trade_with_multiple_legs(self, existing_trade: Trade):
+        update_trade_sql = f"""
+        UPDATE {self.trades_table}
+        SET Date = ?,
+            ExpireDate = ?,
+            DTE = ?,
+            Status = ?,
+            PremiumCaptured = ?,
+            ClosingPremium = ?,
+            ClosedTradeAt = ?,
+            CloseReason = ?
+        WHERE TradeId = ?
+        """
+
+        trade_params = (
+            existing_trade.trade_date,
+            existing_trade.expire_date,
+            existing_trade.dte,
+            existing_trade.status,
+            existing_trade.premium_captured,
+            existing_trade.closing_premium,
+            existing_trade.closed_trade_at,
+            existing_trade.close_reason,
+            existing_trade.id,
+        )
+
+        self.cursor.execute(update_trade_sql, trade_params)
+        self.conn.commit()
+
+        for leg in existing_trade.legs:
+            self.update_trade_leg(existing_trade.id, leg)
 
     def create_trade_with_multiple_legs(self, trade):
         trade_sql = f"""
@@ -965,17 +998,21 @@ class GenericRunner:
                         )
                     )
 
-                    for leg in updated_legs:
-                        leg.leg_type = (
-                            (
+                    existing_trade.legs = [
+                        dataclasses.replace(
+                            leg,
+                            leg_type=(
                                 LegType.TRADE_CLOSE
                                 if trade_can_be_closed
                                 else LegType.TRADE_AUDIT
                             )
                             if leg.historyId
-                            else leg.leg_type
+                            else leg.leg_type,
                         )
-                        db.update_trade_leg(existing_trade_id, leg)
+                        for leg in updated_legs
+                    ]
+
+                    db.update_trade_with_multiple_legs(existing_trade)
 
                     if trade_can_be_closed:
                         logging.debug(
