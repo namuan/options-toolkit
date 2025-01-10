@@ -3,7 +3,7 @@ import unittest
 from argparse import Namespace
 from pathlib import Path
 
-from short_straddle_strategies import ShortStraddleStaggeredEntryStrategy
+from short_straddle_strategies import ShortStraddleStrategy
 
 
 class TestShortStraddleStaggeredEntryStrategy(unittest.TestCase):
@@ -43,7 +43,7 @@ class TestShortStraddleStaggeredEntryStrategy(unittest.TestCase):
     def test_laddered_trade(self):
         self.args.ladder_additional_contracts = True
 
-        with ShortStraddleStaggeredEntryStrategy(self.args) as runner:
+        with ShortStraddleStrategy(self.args) as runner:
             runner.run()
 
         self._assert_database_state_for_laddered_trade()
@@ -109,7 +109,7 @@ class TestShortStraddleStaggeredEntryStrategy(unittest.TestCase):
     def test_multiple_contracts_trade(self):
         self.args.ladder_additional_contracts = False
 
-        with ShortStraddleStaggeredEntryStrategy(self.args) as runner:
+        with ShortStraddleStrategy(self.args) as runner:
             runner.run()
 
         self._assert_database_state_for_multiple_contracts_trade()

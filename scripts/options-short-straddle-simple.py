@@ -13,11 +13,7 @@ from logger import setup_logging
 from options_analysis import (
     add_standard_cli_arguments,
 )
-from short_straddle_strategies import (
-    ShortStraddleRsiFilterStrategy,
-    ShortStraddleStaggeredEntryStrategy,
-    ShortStraddleStrategy,
-)
+from short_straddle_strategies import ShortStraddleStrategy
 
 
 def parse_args():
@@ -74,11 +70,7 @@ def parse_args():
 
 
 def main(args):
-    # with ShortStraddleStrategy(args) as runner:
-    #     runner.run()
-    # with ShortStraddleRsiFilterStrategy(args) as runner:
-    #     runner.run()
-    with ShortStraddleStaggeredEntryStrategy(args) as runner:
+    with ShortStraddleStrategy(args) as runner:
         runner.run()
 
 

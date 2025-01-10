@@ -123,47 +123,41 @@ STRATEGY=LongPutCalendarStrategy; ./scripts/options-strategy-report.py --db-path
 
 ### Short Straddle
 
-Longer Run
+Simple
 
 ```shell
 ./scripts/options-short-straddle-simple.py --db-path data/spx_eod.db --force-close-after-days 10 --dte 45 --profit-take 10 --stop-loss 75 --max-open-trades 5 -v
 ```
 
+Laddering
+
 ```shell
-./scripts/options-short-straddle-simple.py --db-path data/spx_eod.db --number-of-contracts 5 --ladder-additional-contracts --max-open-trades 1 --force-close-after-days 10 --dte 45 --profit-take 10 --stop-loss 75 -v
+./scripts/options-short-straddle-simple.py --db-path data/spx_eod.db --number-of-contracts 5 --ladder-additional-contracts --max-open-trades 1 --force-close-after-days 20 --dte 45 --profit-take 10 --stop-loss 30 -v
+```
+
+All at once
+
+```shell
+./scripts/options-short-straddle-simple.py --db-path data/spx_eod.db --number-of-contracts 5 --max-open-trades 1 --dte 45 --profit-take 5 --stop-loss 30 -v
+```
+
+High Vol Check
+```shell
+./scripts/options-short-straddle-simple.py --db-path data/spx_eod.db --high-vol-check --high-vol-check-window 2 --dte 45 --profit-take 10 --stop-loss 75 --max-open-trades 1 -v
+```
+
+RSI Filter
+
+```shell
+./scripts/options-short-straddle-simple.py --db-path data/spx_eod.db --force-close-after-days 10 --dte 45 --profit-take 10 --stop-loss 75 --max-open-trades 5 --rsi 14 --rsi-low-threshold 30 --rsi-high-threshold 70 -v
 ```
 
 ```shell
-./scripts/options-short-straddle-simple.py --db-path data/spx_eod.db --number-of-contracts 5 --max-open-trades 1 --force-close-after-days 10 --dte 45 --profit-take 10 --stop-loss 75 -v
+STRATEGY=ShortStraddleStrategy;./scripts/options-trade-plotter.py --db-path data/spx_eod.db --strategy-name ${STRATEGY} --table-name-key `sqlite3 data/spx_eod.db "SELECT RawParams, TableNameKey from backtest_runs where Strategy = '"${STRATEGY}"'" | fzf | awk -F\| '{print $2}'`
 ```
 
 ```shell
-for hvcw in {1..2}; do
-  echo "Running for High Vol Check Window: $hvcw"
-  ./scripts/options-short-straddle-simple.py --db-path data/spx_eod.db --high-vol-check --high-vol-check-window $hvcw --dte 45 --profit-take 10 --stop-loss 75 --max-open-trades 1 -v
-done
-```
-
-```shell
-for fcd in {1..20}; do
-  echo "Running for Force Close after: $fcd days"
-  ./scripts/options-short-straddle-simple.py --db-path data/spx_eod.db --force-close-after-days $fcd --dte 45 --profit-take 10 --stop-loss 75 --max-open-trades 1 -v
-done
-```
-
-```shell
-for dte in {44..46}; do
-    echo "Running for DTE: $dte"
-    ./scripts/options-short-straddle-simple.py --db-path data/spx_eod.db --dte $dte --profit-take 10 --stop-loss 75 --max-open-trades 1 -v
-done
-```
-
-```shell
-STRATEGY=ShortStraddleStaggeredEntryStrategy;./scripts/options-trade-plotter.py --db-path data/spx_eod.db --strategy-name ${STRATEGY} --table-name-key `sqlite3 data/spx_eod.db "SELECT RawParams, TableNameKey from backtest_runs where Strategy = '"${STRATEGY}"'" | fzf | awk -F\| '{print $2}'`
-```
-
-```shell
-STRATEGY=ShortStraddleStaggeredEntryStrategy; ./scripts/options-strategy-report.py --db-path data/spx_eod.db --strategy-name ${STRATEGY}
+STRATEGY=ShortStraddleStrategy; ./scripts/options-strategy-report.py --db-path data/spx_eod.db --strategy-name ${STRATEGY}
 ```
 
 ## Testing
@@ -181,14 +175,6 @@ echo "Should see 3 trades"
 ```shell
 ./scripts/options-short-put-simple.py --db-path data/spx_eod.db --short-put-delta 0.5 --dte 45 --start-date 2020-01-01 --end-date 2020-03-30 --max-open-trades 1 --profit-take 10 --stop-loss 75 -v
 echo "Should see 22 trades"
-```
-
-```shell
-STRATEGY=ShortStraddleStaggeredEntryStrategy;./scripts/options-trade-plotter.py --db-path data/spx_eod.db --strategy-name ${STRATEGY} --table-name-key `sqlite3 data/spx_eod.db "SELECT RawParams, TableNameKey from backtest_runs where Strategy = '"${STRATEGY}"'" | fzf | awk -F\| '{print $2}'`
-```
-
-```shell
-STRATEGY=ShortStraddleStaggeredEntryStrategy; ./scripts/options-strategy-report.py --db-path data/spx_eod.db --strategy-name ${STRATEGY}
 ```
 
 ```shell
