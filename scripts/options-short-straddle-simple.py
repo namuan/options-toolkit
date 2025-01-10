@@ -60,6 +60,7 @@ def parse_args():
         default=False,
         help="Enable laddering of additional contracts",
     )
+    parser.add_argument(
         "--rsi-low-threshold",
         type=int,
         help="RSI Lower Threshold",
