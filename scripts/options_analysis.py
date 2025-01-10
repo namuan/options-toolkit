@@ -715,7 +715,9 @@ class OptionsDatabase:
             logging.debug(f"No expiration found with DTE > {min_dte} from {quote_date}")
             return None
 
-    def get_options_data_closest_to_price(self, quote_date, expiry_date) -> OptionsData:
+    def get_options_data_closest_to_price(
+        self, quote_date, expiry_date
+    ) -> Optional[OptionsData]:
         query = """
         SELECT
             *
@@ -730,7 +732,7 @@ class OptionsDatabase:
         logging.debug(
             f"get_current_prices query:\n{query} ({quote_date}, {expiry_date}) => {result}"
         )
-        return OptionsData(*result)
+        return None if not result else OptionsData(*result)
 
     def get_options_by_delta(
         self,

@@ -126,7 +126,15 @@ STRATEGY=LongPutCalendarStrategy; ./scripts/options-strategy-report.py --db-path
 Longer Run
 
 ```shell
-./scripts/options-short-straddle-simple.py --db-path data/spx_eod.db --number-of-contracts 1 --force-close-after-days 10 --dte 45 --profit-take 10 --stop-loss 75 --max-open-trades 5 --rsi 4 --rsi-low-threshold 30 --rsi-high-threshold 100 -v
+./scripts/options-short-straddle-simple.py --db-path data/spx_eod.db --force-close-after-days 10 --dte 45 --profit-take 10 --stop-loss 75 --max-open-trades 5 -v
+```
+
+```shell
+./scripts/options-short-straddle-simple.py --db-path data/spx_eod.db --number-of-contracts 5 --ladder-additional-contracts --max-open-trades 1 --force-close-after-days 10 --dte 45 --profit-take 10 --stop-loss 75 -v
+```
+
+```shell
+./scripts/options-short-straddle-simple.py --db-path data/spx_eod.db --number-of-contracts 5 --max-open-trades 1 --force-close-after-days 10 --dte 45 --profit-take 10 --stop-loss 75 -v
 ```
 
 ```shell

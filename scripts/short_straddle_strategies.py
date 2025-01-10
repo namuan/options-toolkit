@@ -18,7 +18,7 @@ from pandas import DataFrame
 
 
 def calculate_legs_for_straddle(
-    options_db, quote_date, expiry_dte
+    options_db, quote_date, expiry_dte, quantity=1
 ) -> tuple[list[Leg], Optional[float]]:
     od: OptionsData = options_db.get_options_data_closest_to_price(
         quote_date, expiry_dte
@@ -34,7 +34,7 @@ def calculate_legs_for_straddle(
         )
         return [], None
 
-    trade_legs = [
+    base_legs = [
         Leg(
             leg_quote_date=quote_date,
             leg_expiry_date=expiry_dte,
@@ -68,6 +68,8 @@ def calculate_legs_for_straddle(
             iv=od.c_iv,
         ),
     ]
+
+    trade_legs = base_legs * quantity
     premium_captured_calculated = round(sum(leg.premium_open for leg in trade_legs), 2)
     return trade_legs, premium_captured_calculated
 
@@ -324,6 +326,7 @@ class ShortStraddleStaggeredEntryStrategy(GenericRunner):
         super().__init__(args)
         self.dte = args.dte
         self.total_contracts = args.number_of_contracts
+        self.ladder_additional_contracts = args.ladder_additional_contracts
 
     def build_trade(self, options_db, quote_date) -> Optional[Trade]:
         expiry_dte, dte_found = options_db.get_next_expiry_by_dte(quote_date, self.dte)
@@ -333,8 +336,9 @@ class ShortStraddleStaggeredEntryStrategy(GenericRunner):
 
         logging.debug(f"Quote date: {quote_date} -> {expiry_dte=} ({dte_found=:.1f}), ")
 
+        quantity = 1 if self.ladder_additional_contracts else self.total_contracts
         trade_legs, premium = calculate_legs_for_straddle(
-            options_db, quote_date, expiry_dte
+            options_db, quote_date, expiry_dte, quantity
         )
 
         if not trade_legs or len(trade_legs) == 0:
@@ -354,10 +358,15 @@ class ShortStraddleStaggeredEntryStrategy(GenericRunner):
     ) -> Trade:
         existing_expiry = existing_trade.expire_date
         # Make sure we only allow the specified number of contracts
-        if len(existing_trade.legs) >= (self.total_contracts * 2):
+        if not self.ladder_additional_contracts or len(existing_trade.legs) >= (
+            self.total_contracts * 2
+        ):
             return existing_trade
 
         new_legs, premium = calculate_legs_for_straddle(db, quote_date, existing_expiry)
+        if not new_legs:
+            return existing_trade
+
         for nl in new_legs:
             existing_trade.legs.append(nl)
         existing_trade.premium_captured = existing_trade.premium_captured + premium
