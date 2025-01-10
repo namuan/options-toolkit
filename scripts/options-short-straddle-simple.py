@@ -52,8 +52,9 @@ def parse_args():
         "--number-of-contracts",
         type=int,
         default=1,
-        help="Number of contract staggered over days",
+        help="Number of contract laddered over days",
     )
+    # TODO: Add a boolean parameter for ladder_additional_contracts . Default set to False AI!
     parser.add_argument(
         "--rsi-low-threshold",
         type=int,
@@ -68,10 +69,10 @@ def parse_args():
 
 
 def main(args):
-    with ShortStraddleStrategy(args) as runner:
-        runner.run()
-    with ShortStraddleRsiFilterStrategy(args) as runner:
-        runner.run()
+    # with ShortStraddleStrategy(args) as runner:
+    #     runner.run()
+    # with ShortStraddleRsiFilterStrategy(args) as runner:
+    #     runner.run()
     with ShortStraddleStaggeredEntryStrategy(args) as runner:
         runner.run()
 
