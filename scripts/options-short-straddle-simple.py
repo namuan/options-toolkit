@@ -54,8 +54,12 @@ def parse_args():
         default=1,
         help="Number of contract laddered over days",
     )
-    # TODO: Add a boolean parameter for ladder_additional_contracts . Default set to False AI!
     parser.add_argument(
+        "--ladder-additional-contracts",
+        action="store_true",
+        default=False,
+        help="Enable laddering of additional contracts",
+    )
         "--rsi-low-threshold",
         type=int,
         help="RSI Lower Threshold",
