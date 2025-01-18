@@ -229,3 +229,30 @@ sqlite3 data/spx_eod.db "DROP TABLE backtest_runs";
 sqlite3 data/spx_eod.db "SELECT 'DROP TABLE IF EXISTS ' || name || ';' FROM sqlite_master WHERE type = 'table' AND (name LIKE 'trades_%' OR name LIKE 'trade_legs_%');" | sqlite3 data/spx_eod.db
 ```
 
+## TODO
+
+Capture these fields as part of Trade logs. Copied from https://spintwig.com/methodology/
+
+```text
+Date: date position opened
+Ticker: underlying
+Leg: leg number
+Ratio: long is “1” and short is “-1”
+Weight: <not implemented>
+OptionType: call or put
+Year: expiration date year
+Month: expiration date month
+Strike: option strike
+DTE: days till expiration
+TradeOptPx: option position entry price
+Delta: option delta
+EntryStockPx: underlying price at the time of option position entry
+IVR: implied volatility rank at the time of option position entry
+ExitDate: date the option position was exited
+ExitStockPx: underlying price at the time of option position exit
+ExitOptionPx: option position exit price
+ExpirDate: expiration date of option position
+ExpirPx: underlying price at the time of option position expiration
+Profit: PnL of option position minus 2 USD for fees (1 USD to open and 1 USD to close)
+TradeType: opening or adjustment
+```
